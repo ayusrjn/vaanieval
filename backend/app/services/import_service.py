@@ -9,9 +9,9 @@ from app.models.conversation import AudioAsset, Conversation, ConversationTurn
 from app.models.import_job import ImportJob, ImportJobStatus
 from app.models.job_queue import JobQueue, JobStatus
 from app.models.provider import ProviderAccount
+from app.providers.factory import get_provider_adapter
 from app.services.credentials import decrypt_secret
 from app.services.evaluation_service import enqueue_evaluation_job
-from app.services.elevenlabs_client import ElevenLabsClient
 from app.services.queue_service import enqueue_job
 
 IMPORT_PAGE_FETCH = "import_page_fetch"
@@ -28,6 +28,19 @@ def create_import_job(
     end_date: str | None,
     page_size: int,
 ) -> ImportJob:
+    account = db.scalar(
+        select(ProviderAccount).where(
+            ProviderAccount.id == provider_account_id,
+            ProviderAccount.workspace_id == workspace_id,
+        )
+    )
+    if not account:
+        raise ValueError("Provider account not found")
+    if account.provider_name not in {"elevenlabs", "vapi"}:
+        raise ValueError(
+            f"Historical import is not supported for provider {account.provider_name}."
+        )
+
     job = ImportJob(
         workspace_id=workspace_id,
         provider_account_id=provider_account_id,
@@ -58,8 +71,17 @@ def run_import_page_fetch(db: Session, payload: dict) -> None:
 
     import_job.status = ImportJobStatus.RUNNING.value
 
-    client = ElevenLabsClient(api_key=decrypt_secret(account.api_key))
-    response = client.list_conversations(cursor=import_job.cursor, page_size=import_job.page_size)
+    adapter = get_provider_adapter(
+        provider_name=account.provider_name,
+        api_key=decrypt_secret(account.api_key),
+    )
+    response = adapter.list_conversations(
+        cursor=import_job.cursor,
+        page_size=import_job.page_size,
+        agent_id=import_job.agent_id,
+        start_date=import_job.start_date,
+        end_date=import_job.end_date,
+    )
 
     conversations = response.get("conversations", [])
     for item in conversations:
@@ -92,8 +114,19 @@ def run_import_conversation_detail(db: Session, payload: dict) -> None:
     if not account:
         raise ValueError("Provider account not found")
 
-    client = ElevenLabsClient(api_key=decrypt_secret(account.api_key))
-    detail = client.get_conversation_detail(conversation_id)
+    adapter = get_provider_adapter(
+        provider_name=account.provider_name,
+        api_key=decrypt_secret(account.api_key),
+    )
+    detail = adapter.get_conversation_detail(conversation_id)
+    normalized_detail = adapter.normalize_conversation_detail(detail)
+    provider_agent_id = normalized_detail.provider_agent_id
+    language = normalized_detail.language
+    outcome = normalized_detail.outcome
+    started_at = normalized_detail.started_at
+    ended_at = normalized_detail.ended_at
+    turns = normalized_detail.turns
+    audio_url = normalized_detail.audio_url
 
     record = db.scalar(
         select(Conversation).where(
@@ -108,21 +141,29 @@ def run_import_conversation_detail(db: Session, payload: dict) -> None:
             workspace_id=import_job.workspace_id,
             provider_account_id=account.id,
             provider_conversation_id=conversation_id,
-            provider_agent_id=(detail.get("agent_id") or detail.get("agent", {}).get("agent_id")),
-            language=detail.get("language"),
-            outcome=detail.get("outcome"),
+            provider_agent_id=provider_agent_id,
+            language=language,
+            outcome=outcome,
+            started_at=started_at,
+            ended_at=ended_at,
         )
         db.add(record)
         db.flush()
+    else:
+        record.provider_agent_id = provider_agent_id
+        record.language = language
+        record.outcome = outcome
+        record.started_at = started_at
+        record.ended_at = ended_at
 
     db.execute(delete(ConversationTurn).where(ConversationTurn.conversation_id == record.id))
 
-    turns = detail.get("transcript", [])
     for idx, turn in enumerate(turns):
         turn_text = (
             turn.get("text")
             or turn.get("message")
             or turn.get("original_message")
+            or turn.get("content")
             or ""
         )
 
@@ -146,7 +187,6 @@ def run_import_conversation_detail(db: Session, payload: dict) -> None:
             )
         )
 
-    audio_url = detail.get("audio_url")
     if audio_url:
         asset = db.scalar(select(AudioAsset).where(AudioAsset.conversation_id == record.id))
         if asset:
@@ -201,3 +241,5 @@ def cancel_import(db: Session, import_job_id: str) -> ImportJob | None:
     db.commit()
     db.refresh(job)
     return job
+
+

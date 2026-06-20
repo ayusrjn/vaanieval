@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+
+@dataclass
+class ProviderAgentInfo:
+    agent_id: str
+    name: str
+
+
+@dataclass
+class ProviderConversationDetail:
+    provider_agent_id: str | None
+    language: str | None
+    outcome: str | None
+    started_at: datetime | None
+    ended_at: datetime | None
+    turns: list[dict[str, Any]]
+    audio_url: str | None
+
+
+class ProviderAdapter(ABC):
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_agents(self) -> list[ProviderAgentInfo]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_conversations(
+        self,
+        *,
+        cursor: str | None,
+        page_size: int,
+        agent_id: str | None,
+        start_date: str | None,
+        end_date: str | None,
+    ) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_conversation_detail(self, conversation_id: str, *, refresh_analysis: bool = False) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def normalize_conversation_detail(self, detail: dict[str, Any]) -> ProviderConversationDetail:
+        raise NotImplementedError
+
+    @abstractmethod
+    def extract_audio_url(self, detail: dict[str, Any]) -> str | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_insight_payload(
+        self,
+        *,
+        conversation_id: str,
+        provider_agent_id: str | None,
+        outcome: str | None,
+        detail: dict[str, Any],
+    ) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def get_conversation_audio_bytes(self, conversation_id: str) -> bytes | None:
+        return None

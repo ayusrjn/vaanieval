@@ -13,8 +13,16 @@ export type ProviderConnectionResponse = {
   provider_name: string
 }
 
+export type ProviderConnectionListItem = {
+  id: string
+  provider_name: string
+  created_at: string
+}
+
 export type ProviderAgentResponse = {
   id: string
+  provider_account_id: string
+  provider_name: string
   provider_agent_id: string
   name: string
   is_default: boolean
@@ -40,10 +48,14 @@ export type ImportProgressResponse = {
 
 export type ConversationListItem = {
   id: string
+  provider_account_id: string
+  provider_name: string
   provider_conversation_id: string
   provider_agent_id: string | null
   language: string | null
   outcome: string | null
+  started_at: string | null
+  ended_at: string | null
   created_at: string
 }
 

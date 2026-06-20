@@ -5,10 +5,14 @@ from pydantic import BaseModel
 
 class ConversationListItem(BaseModel):
     id: str
+    provider_account_id: str
+    provider_name: str
     provider_conversation_id: str
     provider_agent_id: str | None
     language: str | None
     outcome: str | None
+    started_at: datetime | None
+    ended_at: datetime | None
     created_at: datetime
 
 

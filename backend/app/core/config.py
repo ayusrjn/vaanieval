@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 24
 
     elevenlabs_api_base: str = "https://api.elevenlabs.io"
+    vapi_api_base: str = "https://api.vapi.ai"
     openai_api_base: str = "https://api.openai.com/v1"
 
     @property

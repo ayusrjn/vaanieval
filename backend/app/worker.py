@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.evaluation import ConversationEvaluationRun
+from app.models.import_job import ImportJob, ImportJobStatus
 from app.models.job_queue import JobQueue, JobStatus
 from app.services.import_service import (
     IMPORT_CONVERSATION_DETAIL,
@@ -56,6 +57,28 @@ def _mark_eval_run_failed_from_job_payload(db, job: JobQueue, error_message: str
     db.flush()
 
 
+def _mark_import_run_failed_from_job_payload(db, job: JobQueue, error_message: str) -> None:
+    if job.type not in {IMPORT_PAGE_FETCH, IMPORT_CONVERSATION_DETAIL}:
+        return
+
+    try:
+        payload = json.loads(job.payload_json)
+    except json.JSONDecodeError:
+        return
+
+    import_job_id = payload.get("import_job_id")
+    if not import_job_id:
+        return
+
+    run = db.scalar(select(ImportJob).where(ImportJob.id == import_job_id))
+    if not run:
+        return
+
+    run.status = ImportJobStatus.FAILED.value
+    run.failed_count = (run.failed_count or 0) + 1
+    db.flush()
+
+
 def worker_loop(poll_seconds: float = 1.0) -> None:
     owner = f"worker-{socket.gethostname()}"
     while True:
@@ -79,6 +102,11 @@ def worker_loop(poll_seconds: float = 1.0) -> None:
                         db,
                         job,
                         f"Evaluation job moved to dead-letter after retries: {exc}",
+                    )
+                    _mark_import_run_failed_from_job_payload(
+                        db,
+                        job,
+                        f"Import job moved to dead-letter after retries: {exc}",
                     )
                 db.commit()
             time.sleep(poll_seconds)

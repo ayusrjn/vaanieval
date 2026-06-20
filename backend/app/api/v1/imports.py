@@ -17,15 +17,18 @@ def create_import(
     workspace_id: str = Depends(get_current_workspace_id),
     db: Session = Depends(get_db),
 ) -> ImportJobResponse:
-    job = create_import_job(
-        db,
-        workspace_id=workspace_id,
-        provider_account_id=payload.provider_account_id,
-        agent_id=payload.agent_id,
-        start_date=payload.start_date,
-        end_date=payload.end_date,
-        page_size=payload.page_size,
-    )
+    try:
+        job = create_import_job(
+            db,
+            workspace_id=workspace_id,
+            provider_account_id=payload.provider_account_id,
+            agent_id=payload.agent_id,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            page_size=payload.page_size,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return ImportJobResponse(
         id=job.id,
         status=job.status,

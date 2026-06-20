@@ -12,6 +12,7 @@ import type {
   ImportProgressResponse,
   MessageResponse,
   ProviderAgentResponse,
+  ProviderConnectionListItem,
   ProviderConnectionResponse,
   ProviderModelsResponse,
 } from './types'
@@ -38,10 +39,10 @@ export function logout() {
   return apiRequest<MessageResponse>('/auth/logout', { method: 'POST' })
 }
 
-export function connectProvider(apiKey: string) {
+export function connectProvider(apiKey: string, providerName = 'elevenlabs') {
   return apiRequest<ProviderConnectionResponse>('/provider/connect', {
     method: 'POST',
-    body: JSON.stringify({ api_key: apiKey, provider_name: 'elevenlabs' }),
+    body: JSON.stringify({ api_key: apiKey, provider_name: providerName }),
   })
 }
 
@@ -54,11 +55,28 @@ export function testProviderConnection(providerAccountId?: string) {
   })
 }
 
-export function listAgents(providerAccountId?: string, refresh = false) {
-  const accountPart = providerAccountId
-    ? `provider_account_id=${encodeURIComponent(providerAccountId)}&`
-    : ''
-  return apiRequest<ProviderAgentResponse[]>(`/provider/agents?${accountPart}refresh=${refresh}`)
+export function listProviderConnections() {
+  return apiRequest<ProviderConnectionListItem[]>('/provider/connections')
+}
+
+export function listAgents(options?: {
+  providerAccountId?: string
+  providerName?: string
+  search?: string
+  refresh?: boolean
+}) {
+  const params = new URLSearchParams()
+  if (options?.providerAccountId) {
+    params.append('provider_account_id', options.providerAccountId)
+  }
+  if (options?.providerName) {
+    params.append('provider_name', options.providerName)
+  }
+  if (options?.search) {
+    params.append('search', options.search)
+  }
+  params.append('refresh', String(options?.refresh ?? false))
+  return apiRequest<ProviderAgentResponse[]>(`/provider/agents?${params.toString()}`)
 }
 
 export function setDefaultAgent(agentId: string) {

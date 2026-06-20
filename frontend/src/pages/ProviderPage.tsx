@@ -1,21 +1,31 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { PageHeader } from '../components/PageHeader'
 import { StatusPill } from '../components/StatusPill'
 import {
   connectEvalProvider,
   connectProvider,
   getEvalProviderCatalog,
+  listAgents,
+  listProviderConnections,
   listEvalProviders,
   testProviderConnection,
 } from '../api/endpoints'
-import type { EvalProviderCatalogResponse, EvalProviderResponse } from '../api/types'
+import type {
+  EvalProviderCatalogResponse,
+  EvalProviderResponse,
+  ProviderConnectionListItem,
+} from '../api/types'
 
 const PROVIDER_ACCOUNT_STORAGE_KEY = 've_provider_account_id'
+const PROVIDER_NAME_STORAGE_KEY = 've_provider_name'
 
 export function ProviderPage() {
   const [apiKey, setApiKey] = useState('')
   const [accountId, setAccountId] = useState(localStorage.getItem(PROVIDER_ACCOUNT_STORAGE_KEY) ?? '')
+  const [providerName, setProviderName] = useState(
+    localStorage.getItem(PROVIDER_NAME_STORAGE_KEY) ?? 'elevenlabs',
+  )
+  const [providerConnections, setProviderConnections] = useState<ProviderConnectionListItem[]>([])
   const [result, setResult] = useState('')
   const [error, setError] = useState('')
   const [evalCatalog, setEvalCatalog] = useState<EvalProviderCatalogResponse[]>([])
@@ -23,6 +33,9 @@ export function ProviderPage() {
   const [evalProviderName, setEvalProviderName] = useState('openai')
   const [evalModelName, setEvalModelName] = useState('gpt-4o-mini')
   const [evalApiKey, setEvalApiKey] = useState('')
+  const [showEvalForm, setShowEvalForm] = useState(false)
+  const [isSyncingId, setIsSyncingId] = useState('')
+  const [agentCountByAccount, setAgentCountByAccount] = useState<Record<string, number>>({})
   const [evalResult, setEvalResult] = useState('')
   const [evalError, setEvalError] = useState('')
   const [evalSaving, setEvalSaving] = useState(false)
@@ -32,6 +45,20 @@ export function ProviderPage() {
     () => evalCatalog.find((entry) => entry.provider_name === evalProviderName) ?? null,
     [evalCatalog, evalProviderName],
   )
+
+  const selectedVoiceConnection = useMemo(
+    () => providerConnections.find((connection) => connection.id === accountId) ?? null,
+    [accountId, providerConnections],
+  )
+
+  const configuredEvalProvider = useMemo(
+    () => configuredEvalProviders.find((provider) => provider.provider_name === evalProviderName) ?? configuredEvalProviders[0] ?? null,
+    [configuredEvalProviders, evalProviderName],
+  )
+
+  const readyProviderCount = providerConnections.length
+
+  const connectedVoiceLabel = readyProviderCount === 1 ? 'Connected' : 'Connected'
 
   useEffect(() => {
     let cancelled = false
@@ -74,6 +101,71 @@ export function ProviderPage() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
+    const loadProviderConnections = async () => {
+      try {
+        const connections = await listProviderConnections()
+        if (cancelled) {
+          return
+        }
+        setProviderConnections(connections)
+
+        if (!connections.some((connection) => connection.id === accountId)) {
+          const fallback = connections[0]
+          setAccountId(fallback?.id ?? '')
+          if (fallback) {
+            localStorage.setItem(PROVIDER_ACCOUNT_STORAGE_KEY, fallback.id)
+            localStorage.setItem(PROVIDER_NAME_STORAGE_KEY, fallback.provider_name)
+          } else {
+            localStorage.removeItem(PROVIDER_ACCOUNT_STORAGE_KEY)
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load provider connections')
+        }
+      }
+    }
+
+    void loadProviderConnections()
+
+    return () => {
+      cancelled = true
+    }
+  }, [accountId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadAgentCounts = async () => {
+      try {
+        const agents = await listAgents({ refresh: false })
+        if (cancelled) {
+          return
+        }
+
+        const grouped = agents.reduce<Record<string, number>>((acc, agent) => {
+          const key = agent.provider_account_id
+          acc[key] = (acc[key] ?? 0) + 1
+          return acc
+        }, {})
+        setAgentCountByAccount(grouped)
+      } catch {
+        if (!cancelled) {
+          setAgentCountByAccount({})
+        }
+      }
+    }
+
+    void loadAgentCounts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [providerConnections.length])
+
+  useEffect(() => {
     if (!selectedEvalProvider) {
       return
     }
@@ -91,10 +183,13 @@ export function ProviderPage() {
     setError('')
     setResult('')
     try {
-      const res = await connectProvider(apiKey)
+      const res = await connectProvider(apiKey, providerName)
       setAccountId(res.id)
       localStorage.setItem(PROVIDER_ACCOUNT_STORAGE_KEY, res.id)
-      setResult('ElevenLabs connected successfully.')
+      localStorage.setItem(PROVIDER_NAME_STORAGE_KEY, res.provider_name)
+      const connections = await listProviderConnections()
+      setProviderConnections(connections)
+      setResult(`${res.provider_name} connected successfully.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect provider')
     }
@@ -116,6 +211,25 @@ export function ProviderPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection test failed')
+    }
+  }
+
+  async function handleConnectionSync(connectionId: string) {
+    setError('')
+    setResult('')
+    setIsSyncingId(connectionId)
+
+    try {
+      const res = await testProviderConnection(connectionId)
+      if (res.ok) {
+        setResult(`Sync check complete. Agents detected: ${res.agent_count ?? 0}`)
+      } else {
+        setError(res.error ?? 'Sync check failed')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sync check failed')
+    } finally {
+      setIsSyncingId('')
     }
   }
 
@@ -142,184 +256,254 @@ export function ProviderPage() {
   }
 
   return (
-    <section className="page provider-page">
-      <PageHeader
-        icon="plug"
-        title="Provider Connections"
-        subtitle="Connect once, sync agent metadata, and power every evaluation workflow automatically."
-        className="provider-hero"
-      />
+    <section className="page provider-page revamped-provider-page">
+      <section className="panel provider-top-hero">
+        <div>
+          <h1>Providers & Integrations</h1>
+          <p className="muted">
+            Connect your voice platforms and evaluation providers. We&apos;ll sync data and power your evaluation workflows.
+          </p>
+        </div>
 
-      <div className="provider-grid">
-        <article className="panel provider-card provider-card-primary">
+        <div className="provider-flow-icons" aria-hidden="true">
+          <span className="provider-flow-dot" />
+          <span className="provider-flow-node">
+            <FontAwesomeIcon icon="wave-square" />
+          </span>
+          <span className="provider-flow-node">
+            <FontAwesomeIcon icon="plug" />
+          </span>
+          <span className="provider-flow-node success">
+            <FontAwesomeIcon icon="chart-line" />
+          </span>
+          <span className="provider-flow-dot" />
+        </div>
+      </section>
+
+      <section className="provider-summary-grid">
+        <article className="panel provider-summary-card">
+          <div className="provider-summary-head">
+            <span className="provider-summary-icon">
+              <FontAwesomeIcon icon="wave-square" />
+            </span>
+            <h2>Voice Platforms</h2>
+          </div>
+          <p className="muted">Connect voice platforms to import conversations</p>
+          <div className="provider-summary-value">{readyProviderCount}</div>
+          <small>{connectedVoiceLabel}</small>
+        </article>
+
+        <article className="panel provider-summary-card">
+          <div className="provider-summary-head">
+            <span className="provider-summary-icon evaluation">
+              <FontAwesomeIcon icon="brain" />
+            </span>
+            <h2>Evaluation Provider</h2>
+          </div>
+          <p className="muted">Manage your evaluation models and API keys</p>
+          <div className="provider-summary-value">{configuredEvalProviders.length}</div>
+          <small>Configured</small>
+        </article>
+      </section>
+
+      <div className="provider-grid provider-grid-revamped">
+        <article className="panel provider-card provider-card-primary provider-voice-panel">
           <div className="provider-card-header">
-            <div className="provider-brand">
-              <span className="provider-icon elevenlabs-icon">
-                <FontAwesomeIcon icon={['fab', 'soundcloud']} />
-              </span>
+            <div>
               <div>
-                <h2>ElevenLabs</h2>
-                <p className="muted">Production ready</p>
+                <h2>Connected Voice Platforms</h2>
+                <p className="muted">Manage your voice platform connections and sync settings.</p>
               </div>
             </div>
-            {accountId ? (
-              <StatusPill icon="check-circle" label="Connected" tone="success" />
+
+            <button type="button" className="provider-primary-btn" onClick={() => setProviderName('elevenlabs')}>
+              <FontAwesomeIcon icon="link" />
+              <span>Connect Provider</span>
+            </button>
+          </div>
+
+          <div className="provider-connection-list">
+            {providerConnections.length === 0 ? (
+              <p className="muted">No voice provider connections saved yet.</p>
             ) : (
-              <StatusPill icon="clock" label="Not connected" tone="neutral" />
+              providerConnections.map((connection) => (
+                <article key={connection.id} className="provider-connection-item">
+                  <div className="provider-connection-head">
+                    <div className="provider-logo-mark">{connection.provider_name.slice(0, 1).toUpperCase()}</div>
+                    <div>
+                      <strong>{connection.provider_name === 'elevenlabs' ? 'ElevenLabs' : 'Vapi'}</strong>
+                      <div className="provider-connection-status-row">
+                        <StatusPill icon="check-circle" label="Connected" tone="success" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="provider-connection-meta">
+                    <span>
+                      <FontAwesomeIcon icon="users" /> {agentCountByAccount[connection.id] ?? 0} agents imported
+                    </span>
+                    <span>
+                      <FontAwesomeIcon icon="clock" /> Added {new Date(connection.created_at).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="provider-connection-actions">
+                    <button type="button" className="secondary" onClick={() => handleConnectionSync(connection.id)} disabled={isSyncingId === connection.id}>
+                      <FontAwesomeIcon icon="arrow-rotate-right" />
+                      <span>{isSyncingId === connection.id ? 'Syncing...' : 'Sync Now'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setAccountId(connection.id)
+                        setProviderName(connection.provider_name)
+                        setResult('Connection selected for reconnection.')
+                      }}
+                    >
+                      <FontAwesomeIcon icon="key" />
+                      <span>Reconnect</span>
+                    </button>
+                    <button type="button" className="provider-danger-btn" disabled>
+                      <FontAwesomeIcon icon="xmark-circle" />
+                      <span>Disconnect</span>
+                    </button>
+                  </div>
+                </article>
+              ))
             )}
           </div>
 
-          <div className="agent-capabilities">
-            <span className="chip">
-              <FontAwesomeIcon icon="shield" />
-              <span>Secure API auth</span>
-            </span>
-            <span className="chip">
-              <FontAwesomeIcon icon="users" />
-              <span>Agent sync</span>
-            </span>
-            <span className="chip">
-              <FontAwesomeIcon icon="wave-square" />
-              <span>Conversation metadata</span>
-            </span>
-          </div>
+          <div className="provider-connect-new">
+            <h3>Connect New Provider</h3>
+            <p className="muted">Choose a voice platform to get started.</p>
 
-          <form onSubmit={handleConnect}>
-            <label htmlFor="apiKey">ElevenLabs API key</label>
-            <input
-              id="apiKey"
-              type="password"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              required
-              placeholder="Paste your ElevenLabs key"
-            />
-            <div className="inline">
-              <button type="submit" className="control-with-icon">
-                <FontAwesomeIcon icon="link" />
-                <span>Connect ElevenLabs</span>
+            <div className="provider-choice-row">
+              <button type="button" className={providerName === 'vapi' ? 'provider-choice active' : 'provider-choice'} onClick={() => setProviderName('vapi')}>
+                <span>Vapi</span>
               </button>
-              <button type="button" className="secondary" onClick={handleTest}>
-                <span className="control-with-icon">
-                  <FontAwesomeIcon icon="shield" />
-                  <span>Check connection</span>
-                </span>
+              <button type="button" className={providerName === 'elevenlabs' ? 'provider-choice active' : 'provider-choice'} onClick={() => setProviderName('elevenlabs')}>
+                <span>ElevenLabs</span>
               </button>
             </div>
-          </form>
 
-          {accountId && <p className="muted">Your workspace is connected and ready for agent sync.</p>}
+            <form onSubmit={handleConnect} className="provider-inline-form">
+              <label htmlFor="apiKey">{providerName === 'vapi' ? 'Vapi' : 'ElevenLabs'} API key</label>
+              <input
+                id="apiKey"
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                required
+                placeholder={`Paste your ${providerName === 'vapi' ? 'Vapi' : 'ElevenLabs'} key`}
+              />
+              <div className="inline">
+                <button type="submit" className="provider-primary-btn">
+                  <FontAwesomeIcon icon="link" />
+                  <span>Connect</span>
+                </button>
+                <button type="button" className="secondary" onClick={handleTest} disabled={!selectedVoiceConnection}>
+                  <FontAwesomeIcon icon="shield" />
+                  <span>Test Connection</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
           {result && <p className="note">{result}</p>}
           {error && <p className="error">{error}</p>}
         </article>
 
-        <article className="panel provider-card provider-card-upcoming">
+        <article className="panel provider-card provider-card-upcoming provider-evaluation-panel">
           <div className="provider-card-header">
-            <div className="provider-brand">
-              <span className="provider-icon">
-                <FontAwesomeIcon icon="brain" />
-              </span>
+            <div>
               <div>
-                <h2>Evaluation Models</h2>
-                <p className="muted">Configure multiple LLM providers, save a default model, and reuse them across evaluation reruns.</p>
+                <h2>Evaluation Provider</h2>
+                <p className="muted">Configure your default evaluation settings.</p>
               </div>
             </div>
-            {configuredEvalProviders.length > 0 ? (
-              <StatusPill icon="check-circle" label={`${configuredEvalProviders.length} configured`} tone="success" />
+
+            {configuredEvalProvider ? (
+              <StatusPill icon="check-circle" label="Ready" tone="success" />
             ) : (
               <StatusPill icon="clock" label="Not configured" tone="neutral" />
             )}
           </div>
 
-          <div className="agent-capabilities">
-            <span className="chip">
-              <FontAwesomeIcon icon="lock" />
-              <span>Encrypted storage</span>
-            </span>
-            <span className="chip">
-              <FontAwesomeIcon icon="shuffle" />
-              <span>LangChain orchestration</span>
-            </span>
-            <span className="chip">
-              <FontAwesomeIcon icon="table-cells-large" />
-              <span>Model override per run</span>
-            </span>
+          <div className="provider-eval-card">
+            <h3>{configuredEvalProvider?.provider_name ?? 'OpenAI'}</h3>
+            <div className="provider-eval-meta">
+              <span>Status</span>
+              <StatusPill
+                icon={configuredEvalProvider?.api_key_configured ? 'check-circle' : 'clock'}
+                label={configuredEvalProvider?.api_key_configured ? 'Connected' : 'Not connected'}
+                tone={configuredEvalProvider?.api_key_configured ? 'success' : 'neutral'}
+              />
+            </div>
+            <p className="provider-eval-model">{configuredEvalProvider?.model_name ?? evalModelName}</p>
+
+            <button type="button" className="secondary" onClick={() => setShowEvalForm((value) => !value)}>
+              <FontAwesomeIcon icon="sliders" />
+              <span>{showEvalForm ? 'Hide' : 'Manage'}</span>
+            </button>
           </div>
 
-          <form onSubmit={handleSaveEvalProvider}>
-            <label htmlFor="eval-provider-name">Evaluation provider</label>
-            <select
-              id="eval-provider-name"
-              value={evalProviderName}
-              onChange={(event) => setEvalProviderName(event.target.value)}
-              disabled={evalLoading || evalSaving || evalCatalog.length === 0}
-            >
-              {evalCatalog.map((entry) => (
-                <option key={entry.provider_name} value={entry.provider_name}>
-                  {entry.display_name}
-                </option>
-              ))}
-            </select>
+          {showEvalForm ? (
+            <form onSubmit={handleSaveEvalProvider} className="provider-eval-form">
+              <label htmlFor="eval-provider-name">Evaluation provider</label>
+              <select
+                id="eval-provider-name"
+                value={evalProviderName}
+                onChange={(event) => setEvalProviderName(event.target.value)}
+                disabled={evalLoading || evalSaving || evalCatalog.length === 0}
+              >
+                {evalCatalog.map((entry) => (
+                  <option key={entry.provider_name} value={entry.provider_name}>
+                    {entry.display_name}
+                  </option>
+                ))}
+              </select>
 
-            <label htmlFor="eval-model-name">Default evaluation model</label>
-            <select
-              id="eval-model-name"
-              value={evalModelName}
-              onChange={(event) => setEvalModelName(event.target.value)}
-              disabled={evalLoading || evalSaving || !selectedEvalProvider}
-            >
-              {(selectedEvalProvider?.models ?? []).map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                </option>
-              ))}
-            </select>
+              <label htmlFor="eval-model-name">Default evaluation model</label>
+              <select
+                id="eval-model-name"
+                value={evalModelName}
+                onChange={(event) => setEvalModelName(event.target.value)}
+                disabled={evalLoading || evalSaving || !selectedEvalProvider}
+              >
+                {(selectedEvalProvider?.models ?? []).map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
 
-            <label htmlFor="eval-api-key">Provider API key</label>
-            <input
-              id="eval-api-key"
-              type="password"
-              value={evalApiKey}
-              onChange={(event) => setEvalApiKey(event.target.value)}
-              required
-              placeholder={selectedEvalProvider ? `Paste your ${selectedEvalProvider.display_name} API key` : 'Paste your provider key'}
-            />
+              <label htmlFor="eval-api-key">Provider API key</label>
+              <input
+                id="eval-api-key"
+                type="password"
+                value={evalApiKey}
+                onChange={(event) => setEvalApiKey(event.target.value)}
+                required
+                placeholder={selectedEvalProvider ? `Paste your ${selectedEvalProvider.display_name} API key` : 'Paste your provider key'}
+              />
 
-            <p className="muted settings-note">
-              Keys are encrypted before they are written to the database. The saved default model becomes the default selection in the evaluation modal, but you can still change it for any rerun.
-            </p>
-
-            <div className="inline">
-              <button type="submit" className="control-with-icon" disabled={evalSaving || !evalApiKey || !evalModelName}>
+              <button type="submit" className="provider-primary-btn" disabled={evalSaving || !evalApiKey || !evalModelName}>
                 <FontAwesomeIcon icon="floppy-disk" />
-                <span>{evalSaving ? 'Saving...' : 'Save evaluation provider'}</span>
+                <span>{evalSaving ? 'Saving...' : 'Save Settings'}</span>
               </button>
-            </div>
-          </form>
+            </form>
+          ) : null}
 
           {evalResult && <p className="note">{evalResult}</p>}
           {evalError && <p className="error">{evalError}</p>}
 
-          <div className="provider-config-list">
-            <h3>Configured evaluation providers</h3>
-            {configuredEvalProviders.length === 0 ? (
-              <p className="muted">No evaluation providers configured yet.</p>
-            ) : (
-              configuredEvalProviders.map((provider) => (
-                <article key={provider.id}>
-                  <div>
-                    <strong>{provider.provider_name}</strong>
-                    <p className="muted">Default model: {provider.model_name}</p>
-                  </div>
-                  <div className="provider-config-badges">
-                    <span className="upcoming-pill">
-                      <FontAwesomeIcon icon="key" />
-                      <span>{provider.api_key_configured ? 'API key saved' : 'No key saved'}</span>
-                    </span>
-                  </div>
-                </article>
-              ))
-            )}
+          <div className="panel provider-eval-info">
+            <h3>About Evaluation</h3>
+            <p className="muted">
+              Your evaluation provider is used to score conversations and generate insights. You can change the model or provider anytime.
+            </p>
+            <a href="/conversations">Learn more about evaluations</a>
           </div>
         </article>
       </div>

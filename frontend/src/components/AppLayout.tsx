@@ -5,6 +5,16 @@ import { logout } from '../api/endpoints'
 export function AppLayout() {
   const navigate = useNavigate()
 
+  const navItems = [
+    { to: '/onboarding', icon: 'house', label: 'Dashboard' },
+    { to: '/conversations', icon: 'comments', label: 'Conversations' },
+    { to: '/settings/agents', icon: 'users', label: 'Agents' },
+    { to: '/onboarding#evaluations', icon: 'chart-line', label: 'Evaluations' },
+    { to: '/imports/new', icon: 'file-import', label: 'Imports' },
+    { to: '/settings/provider', icon: 'plug', label: 'Providers' },
+    { to: '/onboarding#settings', icon: 'sliders', label: 'Settings' },
+  ]
+
   async function handleLogout() {
     try {
       await logout()
@@ -16,36 +26,30 @@ export function AppLayout() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <Link to="/onboarding" className="brand">
+      <aside className="app-sidebar">
+        <Link to="/onboarding" className="sidebar-brand">
           VaaniEval
         </Link>
-        <nav>
-          <NavLink to="/onboarding">
-            <FontAwesomeIcon icon="house" />
-            <span>Overview</span>
-          </NavLink>
-          <NavLink to="/settings/provider">
-            <FontAwesomeIcon icon="plug" />
-            <span>Provider</span>
-          </NavLink>
-          <NavLink to="/settings/agents">
-            <FontAwesomeIcon icon="users" />
-            <span>Agents</span>
-          </NavLink>
-          <NavLink to="/imports/new">
-            <FontAwesomeIcon icon="file-import" />
-            <span>New Import</span>
-          </NavLink>
-          <NavLink to="/conversations">
-            <FontAwesomeIcon icon="comments" />
-            <span>Conversations</span>
-          </NavLink>
+
+        <nav className="sidebar-nav" aria-label="Primary">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.label}
+              to={item.to}
+              className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
+            >
+              <FontAwesomeIcon icon={item.icon as never} />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
         </nav>
-        <button className="secondary" onClick={handleLogout} type="button">
-          Logout
+
+        <button className="sidebar-logout" onClick={handleLogout} type="button">
+          <FontAwesomeIcon icon="link" />
+          <span>Logout</span>
         </button>
       </aside>
+
       <main className="content">
         <Outlet />
       </main>

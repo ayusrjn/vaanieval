@@ -2,7 +2,7 @@
 
 Production evaluation platform for voice agents.
 
-VaaniEval is an open-source, ElevenLabs-first evaluation stack for teams that want to measure real conversation quality using production data.
+VaaniEval is an open-source evaluation stack for teams that want to measure real conversation quality using production data across both ElevenLabs and Vapi.
 
 ## Why VaaniEval
 
@@ -13,7 +13,7 @@ VaaniEval gives you:
 - Real conversation ingestion (historical + ongoing imports)
 - Conversation review workspace with transcript + audio playback
 - Evaluation runs with metric-level rationale
-- Configurable evaluator providers and models
+- Configurable voice providers and evaluator providers
 - Queue-backed processing for reliability at scale
 
 ## Product Snapshot
@@ -21,14 +21,27 @@ VaaniEval gives you:
 - Frontend: React + Vite
 - Backend API: FastAPI + SQLAlchemy
 - Worker: DB-backed async job processing
-- Primary provider: ElevenLabs
+- Voice providers: ElevenLabs and Vapi
+- Evaluation provider: configurable, with OpenAI-first defaults
 - Storage: SQLite in local dev (extensible to managed DB)
 
 ## Screenshots
 
+<details>
+<summary>Command center and provider setup</summary>
+
 ### Command Center
 
 ![Onboarding Dashboard](docs/assets/screenshots/onboarding-dashboard.png)
+
+### Provider and Model Configuration
+
+![Provider Settings](docs/assets/screenshots/provider-settings.png)
+
+</details>
+
+<details>
+<summary>Conversation review workspace</summary>
 
 ### Conversations Workspace
 
@@ -38,10 +51,6 @@ VaaniEval gives you:
 
 ![Conversation Detail](docs/assets/screenshots/conversation-detail.png)
 
-### Provider and Model Configuration
-
-![Provider Settings](docs/assets/screenshots/provider-settings.png)
-
 ### Agent Management
 
 ![Agents Page](docs/assets/screenshots/agents-page.png)
@@ -49,6 +58,21 @@ VaaniEval gives you:
 ### Historical Import Setup
 
 ![Import Setup](docs/assets/screenshots/import-new.png)
+
+</details>
+
+## Demo
+
+<details>
+<summary>Walkthrough</summary>
+
+The repo does not include a bundled demo video yet, so this section stays lightweight and easy to expand later.
+
+- Start the app from [docs/development.md](docs/development.md)
+- Connect either ElevenLabs or Vapi from the provider settings page
+- Import conversations, review scores, and inspect transcripts in the conversations workspace
+
+</details>
 
 ## Quick Start (V2)
 
@@ -88,6 +112,8 @@ python -m app.worker
 ## Architecture
 
 For detailed backend internals, see [docs/backend-architecture.md](docs/backend-architecture.md).
+
+Provider support is adapter-based, so adding another voice platform follows the same factory + adapter pattern used for ElevenLabs and Vapi.
 
 Highlights:
 

@@ -10,6 +10,7 @@ import {
   listConversations,
   runConversationEvaluation,
 } from '../api/endpoints'
+import { PageHeader } from '../components/PageHeader'
 import type {
   AudioAssetResponse,
   ConversationEvaluationRunResponse,
@@ -18,6 +19,14 @@ import type {
   ConversationListItem,
 } from '../api/types'
 
+function formatProviderName(providerName: string) {
+  return providerName === 'elevenlabs'
+    ? 'ElevenLabs'
+    : providerName === 'vapi'
+      ? 'Vapi'
+      : providerName
+}
+
 const SPEED_OPTIONS = [1, 1.2, 1.5, 2]
 const METRIC_LABELS: Record<string, string> = {
   task_completion_score: 'Task Completion',
@@ -25,6 +34,8 @@ const METRIC_LABELS: Record<string, string> = {
   required_info_capture_score: 'Required Info Capture',
   ai_detectability_score: 'AI Detectability',
 }
+
+type DetailTab = 'score' | 'player' | 'transcript' | 'metadata'
 
 function formatConversationTitle(createdAt: string) {
   const date = new Date(createdAt)
@@ -40,6 +51,44 @@ function formatConversationCardTitle(createdAt: string, index: number) {
     return `Call ${index + 1}`
   }
   return `Call ${index + 1} · ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+}
+
+function getConversationDisplayDate(row: ConversationListItem) {
+  return row.started_at || row.created_at
+}
+
+function formatConversationDate(value: string | null) {
+  if (!value) {
+    return 'Unknown'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown'
+  }
+  return date.toLocaleString()
+}
+
+function normalizeTimelineOffsets<T extends { started_ms: number | null; ended_ms: number | null }>(
+  turns: T[],
+) {
+  const starts = turns
+    .map((turn) => turn.started_ms)
+    .filter((value): value is number => Number.isFinite(value as number))
+
+  if (starts.length === 0) {
+    return { offsetMs: 0 }
+  }
+
+  const minStart = Math.min(...starts)
+  const maxStart = Math.max(...starts)
+  const looksAbsolute = minStart >= 1_000_000_000_000 || maxStart >= 1_000_000_000_000
+  const unrealisticallyLargeRange = maxStart > 86_400_000
+
+  if (looksAbsolute || unrealisticallyLargeRange) {
+    return { offsetMs: minStart }
+  }
+
+  return { offsetMs: 0 }
 }
 
 function getScoreTone(score: number | null) {
@@ -63,6 +112,8 @@ export function ConversationsPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const [providerFilter, setProviderFilter] = useState('all')
+  const [agentFilter, setAgentFilter] = useState('all')
   const [scoreFilter, setScoreFilter] = useState('all')
   const [selectedId, setSelectedId] = useState('')
   const [detail, setDetail] = useState<ConversationDetailResponse | null>(null)
@@ -100,6 +151,7 @@ export function ConversationsPage() {
   const [duration, setDuration] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackRate, setPlaybackRate] = useState(1)
+  const [detailTab, setDetailTab] = useState<DetailTab>('score')
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const subtitleListRef = useRef<HTMLUListElement | null>(null)
   const lastActiveTurnRef = useRef(-1)
@@ -195,6 +247,12 @@ export function ConversationsPage() {
     }
   }, [selectedId, evaluationRun])
 
+  const providerOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((row) => row.provider_name))).sort((left, right) =>
+      formatProviderName(left).localeCompare(formatProviderName(right)),
+    )
+  }, [rows])
+
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     return rows
@@ -202,16 +260,50 @@ export function ConversationsPage() {
         if (preselectedAgentId && (row.provider_agent_id ?? '') !== preselectedAgentId) {
           return false
         }
+        if (agentFilter !== 'all' && (row.provider_agent_id ?? '') !== agentFilter) {
+          return false
+        }
+        if (providerFilter !== 'all' && row.provider_name !== providerFilter) {
+          return false
+        }
         if (!normalized) {
           return true
         }
-        return [row.provider_conversation_id, row.provider_agent_id ?? '', row.outcome ?? '', row.language ?? '']
+        return [
+          row.provider_conversation_id,
+          row.provider_agent_id ?? '',
+          row.provider_name,
+          formatProviderName(row.provider_name),
+          row.outcome ?? '',
+          row.language ?? '',
+        ]
           .join(' ')
           .toLowerCase()
           .includes(normalized)
       })
-      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-  }, [preselectedAgentId, query, rows])
+      .sort((a, b) => Date.parse(getConversationDisplayDate(b)) - Date.parse(getConversationDisplayDate(a)))
+  }, [agentFilter, preselectedAgentId, providerFilter, query, rows])
+
+  const agentOptions = useMemo(() => {
+    return Array.from(new Set(filteredRows.map((row) => row.provider_agent_id).filter(Boolean) as string[])).sort()
+  }, [filteredRows])
+
+  const dateRangeLabel = useMemo(() => {
+    if (filteredRows.length === 0) {
+      return 'No dates'
+    }
+    const dates = filteredRows
+      .map((row) => getConversationDisplayDate(row))
+      .filter((value) => Number.isFinite(Date.parse(value)))
+      .map((value) => new Date(value))
+      .sort((left, right) => left.getTime() - right.getTime())
+    if (dates.length === 0) {
+      return 'All dates'
+    }
+    const start = dates[0]
+    const end = dates[dates.length - 1]
+    return `${start.toLocaleDateString([], { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+  }, [filteredRows])
 
   const selectedRow = selectedId ? filteredRows.find((row) => row.id === selectedId) ?? null : null
 
@@ -280,15 +372,30 @@ export function ConversationsPage() {
       return []
     }
 
-    const sorted = [...detail.turns].sort((a, b) => a.turn_order - b.turn_order)
+    const sorted = [...detail.turns]
+      .filter((turn) => {
+        const role = (turn.role || '').toLowerCase()
+        return role !== 'system' && role !== 'developer'
+      })
+      .sort((a, b) => a.turn_order - b.turn_order)
+
+    const { offsetMs } = normalizeTimelineOffsets(sorted)
+
     return sorted.map((turn, index) => {
-      const fallbackStart = index === 0 ? 0 : sorted[index - 1].started_ms ?? 0
-      const startSec = (turn.started_ms ?? fallbackStart) / 1000
-      let endSec = turn.ended_ms != null ? turn.ended_ms / 1000 : undefined
+      const previousStart = sorted[index - 1]?.started_ms
+      const fallbackStartMs = index === 0 ? 0 : (previousStart != null ? Math.max(0, previousStart - offsetMs) : 0)
+      const normalizedStartMs = turn.started_ms != null ? Math.max(0, turn.started_ms - offsetMs) : fallbackStartMs
+      const startSec = normalizedStartMs / 1000
+      const normalizedEndMs = turn.ended_ms != null ? Math.max(0, turn.ended_ms - offsetMs) : null
+      let endSec = normalizedEndMs != null ? normalizedEndMs / 1000 : undefined
+      const normalizedRole = ['bot', 'assistant', 'ai'].includes((turn.role || '').toLowerCase())
+        ? 'agent'
+        : turn.role
 
       if (endSec == null) {
         const next = sorted[index + 1]
-        endSec = next?.started_ms != null ? next.started_ms / 1000 : startSec + 4
+        const nextStartMs = next?.started_ms != null ? Math.max(0, next.started_ms - offsetMs) : null
+        endSec = nextStartMs != null ? nextStartMs / 1000 : startSec + 4
       }
 
       if (endSec <= startSec) {
@@ -297,6 +404,7 @@ export function ConversationsPage() {
 
       return {
         ...turn,
+        role: normalizedRole,
         startSec,
         endSec,
       }
@@ -485,6 +593,14 @@ export function ConversationsPage() {
     return Math.round(total / scoredMetrics.length)
   }, [evaluationMetrics])
 
+  const scoreSummaryTone = getScoreTone(evaluationSummaryScore)
+  const scoreSummaryBackground =
+    scoreSummaryTone === 'score-risk'
+      ? 'score-summary-risk'
+      : scoreSummaryTone === 'score-warning'
+        ? 'score-summary-warning'
+        : 'score-summary-success'
+
   const getScoreToneClass = (score: number | null) => {
     if (score == null) {
       return 'score-neutral'
@@ -570,6 +686,10 @@ export function ConversationsPage() {
     return scoreFilteredRows.findIndex((row) => row.id === selectedId)
   }, [scoreFilteredRows, selectedId])
 
+  useEffect(() => {
+    setDetailTab('score')
+  }, [selectedId])
+
   const refreshLatestEvaluation = async () => {
     if (!selectedId) {
       return
@@ -602,66 +722,88 @@ export function ConversationsPage() {
   }
 
   return (
-    <section className="page conversations-workspace">
-      <header className="conversations-header panel">
-        <div>
-          <h1>Conversations</h1>
-          <p className="muted">
-            {preselectedAgentId
-              ? `Showing calls for ${preselectedAgentName || 'selected agent'}.`
-              : 'High-speed review mode for imported calls.'}
-          </p>
-        </div>
-        <div className="conversations-summary">
-          <span>{scoreFilteredRows.length} visible</span>
-          <span>{rows.length} total</span>
-        </div>
-      </header>
+    <section className="page conversations-workspace workspace-page">
+      <PageHeader
+        icon="comments"
+        title="Conversations"
+        subtitle={
+          preselectedAgentId
+            ? `Showing calls for ${preselectedAgentName || 'selected agent'}.`
+            : 'Review and evaluate imported conversations.'
+        }
+        actions={
+          <button type="button" className="workspace-export-button">
+            <FontAwesomeIcon icon="download" />
+            <span>Export</span>
+          </button>
+        }
+      />
 
-      <div className="panel conversations-toolbar">
-        <label className="toolbar-field">
+      <div className="panel conversations-toolbar workspace-toolbar">
+        <label className="toolbar-field toolbar-field-search">
           <span>
             <FontAwesomeIcon icon="magnifying-glass" /> Search
           </span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by conversation or agent"
+            placeholder="Search conversations..."
           />
         </label>
         <label className="toolbar-field">
-          <span>
-            <FontAwesomeIcon icon="star" /> Score
-          </span>
-          <select value={scoreFilter} onChange={(event) => setScoreFilter(event.target.value)}>
-            <option value="all">All scores</option>
-            <option value="red">Red (&lt; 60)</option>
-            <option value="yellow">Yellow (60-75)</option>
-            <option value="green">Green (75+)</option>
+          <span>Provider</span>
+          <select value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)}>
+            <option value="all">All Providers</option>
+            {providerOptions.map((providerName) => (
+              <option key={providerName} value={providerName}>
+                {formatProviderName(providerName)}
+              </option>
+            ))}
           </select>
         </label>
+        <label className="toolbar-field">
+          <span>Agent</span>
+          <select
+            value={preselectedAgentId || agentFilter}
+            onChange={(event) => setAgentFilter(event.target.value)}
+            disabled={Boolean(preselectedAgentId)}
+          >
+            <option value="all">All Agents</option>
+            {agentOptions.map((agentId) => (
+              <option key={agentId} value={agentId}>
+                {agentId}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="toolbar-field">
+          <span>Score</span>
+          <select value={scoreFilter} onChange={(event) => setScoreFilter(event.target.value)}>
+            <option value="all">All Scores</option>
+            <option value="red">Red (&lt; 60)</option>
+            <option value="yellow">Yellow (60-79)</option>
+            <option value="green">Green (80+)</option>
+          </select>
+        </label>
+        <label className="toolbar-field toolbar-field-date">
+          <span>
+            <FontAwesomeIcon icon="calendar" /> Date range
+          </span>
+          <input type="text" value={dateRangeLabel} readOnly />
+        </label>
+        <button type="button" className="workspace-filter-button">
+          <FontAwesomeIcon icon="sliders" />
+          <span>Filters</span>
+        </button>
       </div>
 
-      <div className="conversations-grid">
-        <aside className="panel conversations-list-panel">
-          <div className="inline conversations-list-actions">
-            <span className="muted shortcuts-hint">Shortcuts: J/K or Arrow keys</span>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => jumpSelection(-1)}
-              disabled={selectedIndex <= 0}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => jumpSelection(1)}
-              disabled={selectedIndex < 0 || selectedIndex >= scoreFilteredRows.length - 1}
-            >
-              Next
-            </button>
+      <div className="conversations-grid workspace-grid">
+        <aside className="panel conversations-list-panel workspace-list-panel">
+          <div className="workspace-list-header">
+            <strong>{rows.length} conversations</strong>
+            <select value="newest" onChange={() => undefined}>
+              <option value="newest">Newest first</option>
+            </select>
           </div>
 
           {loading ? (
@@ -691,146 +833,164 @@ export function ConversationsPage() {
                       className={`conversation-card ${selected ? 'active' : ''}`}
                       onClick={() => setSelectedId(row.id)}
                     >
-                      <span className="conversation-id">{formatConversationCardTitle(row.created_at, index)}</span>
+                      <span className="conversation-card-title-row">
+                        <span className="conversation-id">Call • {new Date(getConversationDisplayDate(row)).toLocaleDateString()}</span>
+                        <span className="conversation-provider-badge">{formatProviderName(row.provider_name)}</span>
+                      </span>
+                      <span className="conversation-subtitle">Agent: {row.provider_agent_id ?? 'Unknown'}</span>
                       <span className="conversation-meta">
-                        <FontAwesomeIcon icon="headset" /> Voice assistant call
+                        <FontAwesomeIcon icon="clock" /> {formatConversationDate(getConversationDisplayDate(row))}
                       </span>
                       <span className="conversation-meta">
-                        <FontAwesomeIcon icon="calendar" /> {new Date(row.created_at).toLocaleString()}
+                        <FontAwesomeIcon icon="clock" /> {formatClock((audio?.duration_ms ?? 0) / 1000)}
                       </span>
                       <span className="conversation-eval-row">
-                        <span className={`score-pill ${scoreToneClass} ${isEvalLoading ? 'is-loading' : ''}`}>
+                        <span className={`conversation-score-badge ${scoreToneClass} ${isEvalLoading ? 'is-loading' : ''}`}>
                           {isEvalLoading ? (
                             <>
                               <FontAwesomeIcon icon="circle-notch" spin /> Fetching
                             </>
                           ) : evalSummary?.overall == null ? (
-                            'No eval'
+                            '--/100'
                           ) : (
                             `${evalSummary.overall}/100`
                           )}
                         </span>
                         <span className={`eval-status-pill ${statusClass}`}>
-                          {(status === 'queued' || status === 'running') && <FontAwesomeIcon icon="circle-notch" spin />}
-                          {status ? `Eval ${status}` : 'Eval not run'}
-                          {evalSummary?.model ? ` · ${evalSummary.model}` : ''}
+                          {status === 'queued' || status === 'running' ? <FontAwesomeIcon icon="circle-notch" spin /> : null}
+                          {status ? 'Evaluated' : 'Not evaluated'}
                         </span>
                       </span>
-                      {evalSummary?.metrics && evalSummary.metrics.length > 0 && (
-                        <span className="conversation-metrics-summary">
-                          {evalSummary.metrics.map((metric) => (
-                            <span key={metric.key} className={`metric-mini ${getScoreTone(metric.score)}`} title={METRIC_LABELS[metric.key]}>
-                              {metric.score == null ? '-' : metric.score}
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                      {evalSummary?.createdAt && (
-                        <span className="conversation-eval-time">
-                          {new Date(evalSummary.createdAt).toLocaleString()}
-                        </span>
-                      )}
                     </button>
                   </li>
                 )
               })}
             </ul>
           )}
+
+            <div className="workspace-pagination">
+              <button type="button" className="secondary" disabled>
+                Previous
+              </button>
+              <div className="workspace-page-numbers">
+                {[1, 2, 3, 4, 5].map((page) => (
+                  <button key={page} type="button" className={page === 1 ? 'page-number active' : 'page-number'}>
+                    {page}
+                  </button>
+                ))}
+                <span className="page-ellipsis">…</span>
+                <button type="button" className="page-number">
+                  32
+                </button>
+              </div>
+              <button type="button" className="secondary" disabled>
+                Next
+              </button>
+            </div>
         </aside>
 
-        <section className="panel conversations-detail-panel">
+          <section className="panel conversations-detail-panel workspace-center-panel">
           {!selectedRow ? (
             <p className="muted">Select a conversation to preview details.</p>
           ) : detailLoading ? (
             <p className="muted">Loading selected conversation...</p>
           ) : detail ? (
             <>
-              <div className="conversations-detail-header">
+                <div className="workspace-detail-header">
                 <div>
-                  <h2>{selectedRow ? formatConversationTitle(selectedRow.created_at) : 'Conversation review'}</h2>
-                  <p className="muted">Agent: {insights?.assistant_name || 'Voice assistant'}</p>
+                  <h2>{selectedRow ? formatConversationTitle(getConversationDisplayDate(selectedRow)) : 'Conversation review'}</h2>
+                  <p className="muted">
+                      Provider: {formatProviderName(selectedRow.provider_name)} · Agent: {insights?.assistant_name || selectedRow.provider_agent_id || 'Voice assistant'} · Duration: {formatClock(effectiveDuration)} · ID: {detail.id}
+                  </p>
                 </div>
-                <Link to={`/conversations/${detail.id}`}>Open full detail</Link>
+                  <div className="workspace-detail-actions">
+                    <Link to={`/conversations/${detail.id}`} className="workspace-open-detail">
+                      <FontAwesomeIcon icon="arrow-up-right-from-square" />
+                      <span>Open full detail</span>
+                    </Link>
+                  </div>
               </div>
 
-              <div className="conversation-insights panel">
-                <div className="conversation-insights-header">
-                  <h3>Evaluation scores</h3>
-                  <div className="inline">
-                    <button type="button" className="secondary" onClick={() => void refreshLatestEvaluation()} disabled={evaluationLoading}>
-                      {evaluationLoading ? 'Refreshing...' : 'Refresh latest'}
-                    </button>
-                    <button type="button" onClick={() => void runEvaluation()} disabled={evaluationLoading}>
-                      {evaluationLoading ? 'Running...' : 'Run evaluation'}
-                    </button>
+                <section className={`panel evaluation-hero-card ${scoreSummaryBackground}`}>
+                  <div className="evaluation-hero-left">
+                    <small>Overall Evaluation Score</small>
+                    <p>{evaluationSummaryScore == null ? '--' : `${evaluationSummaryScore}/100`}</p>
+                    <span className="muted">Average across the four evaluation metrics.</span>
                   </div>
+                  <div className="evaluation-hero-right">
+                    <div className="sparkline">
+                      {[14, 18, 16, 20, 18, 12, 10, 16, 14, 12, 18, 16].map((height, index) => (
+                        <span key={index} style={{ height: `${height}px` }} />
+                      ))}
+                    </div>
+                    <span className="evaluation-delta">↓ 12 vs previous evaluation</span>
+                  </div>
+                </section>
+
+                <section className="metric-grid">
+                  {evaluationMetrics.map((metric) => (
+                    <article key={metric.key} className="metric-card">
+                      <small>{metric.label}</small>
+                      <strong>{metric.score == null ? '--/100' : `${metric.score}/100`}</strong>
+                      <div className="metric-progress-track">
+                        <span className={`metric-progress-bar ${getScoreTone(metric.score)}`} style={{ width: `${metric.score ?? 0}%` }} />
+                      </div>
+                    </article>
+                  ))}
+                </section>
+
+                <div className="workspace-tabs" role="tablist" aria-label="Conversation review tabs">
+                  <button type="button" className={detailTab === 'score' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setDetailTab('score')}>
+                    <FontAwesomeIcon icon="chart-line" />
+                    <span>Score Breakdown</span>
+                  </button>
+                  <button type="button" className={detailTab === 'player' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setDetailTab('player')}>
+                    <FontAwesomeIcon icon="play" />
+                    <span>Call Player</span>
+                  </button>
+                  <button type="button" className={detailTab === 'transcript' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setDetailTab('transcript')}>
+                    <FontAwesomeIcon icon="comments" />
+                    <span>Transcript</span>
+                  </button>
+                  <button type="button" className={detailTab === 'metadata' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setDetailTab('metadata')}>
+                    <FontAwesomeIcon icon="calendar" />
+                    <span>Metadata</span>
+                  </button>
                 </div>
-                {evaluationRun ? (
-                  <>
-                    <p className="muted">
-                      Status: {evaluationRun.status}
-                      {evaluationRun.provider_model ? ` · ${evaluationRun.provider_model}` : ''}
-                    </p>
-                    {evaluationRun.error_message ? <p className="error">{evaluationRun.error_message}</p> : null}
-                  </>
-                ) : (
-                  <p className="muted">No evaluation run found yet for this conversation.</p>
-                )}
-                {evaluationRun?.status === 'queued' || evaluationRun?.status === 'running' ? (
-                  <div className="evaluation-status-banner">
-                    <strong>
-                      <FontAwesomeIcon icon="circle-notch" spin /> Scoring in progress
-                    </strong>
-                    <span>Fetching updated results shortly.</span>
+
+                {detailTab === 'score' ? (
+                  <div className="score-breakdown-panel">
+                    <table className="evaluation-table workspace-evaluation-table">
+                      <thead>
+                        <tr>
+                          <th>Metric</th>
+                          <th>Score</th>
+                          <th>Rationale</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {evaluationMetrics.map((metric) => (
+                          <tr key={metric.key}>
+                            <td>{metric.label}</td>
+                            <td>
+                              <span className={`score-pill ${getScoreTone(metric.score)}`}>
+                                {metric.score == null ? '-' : `${metric.score}/100`}
+                              </span>
+                            </td>
+                            <td>{metric.rationale ?? 'No rationale available yet.'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : null}
 
-                <div className="evaluation-summary">
-                  <article className={`evaluation-summary-card ${getScoreToneClass(evaluationSummaryScore)}`}>
-                    <small>Overall evaluation score</small>
-                    <p>{evaluationSummaryScore == null ? '--' : `${evaluationSummaryScore}/100`}</p>
-                    <span className="muted">Average across the four evaluation metrics.</span>
-                  </article>
-
-                  <div className="quality-signals-grid">
-                    {evaluationMetrics.map((metric) => (
-                      <article key={metric.key}>
-                        <small>{metric.label}</small>
-                        <p className={getScoreToneClass(metric.score)}>{metric.score == null ? '-' : `${metric.score}/100`}</p>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-
-                <table className="evaluation-table">
-                  <thead>
-                    <tr>
-                      <th>Metric</th>
-                      <th>Score</th>
-                      <th>Rationale</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {evaluationMetrics.map((metric) => (
-                      <tr key={metric.key}>
-                        <td>{metric.label}</td>
-                        <td>
-                          <span className={`score-pill ${getScoreToneClass(metric.score)}`}>
-                            {metric.score == null ? '-' : `${metric.score}/100`}
-                          </span>
-                        </td>
-                        <td>{metric.rationale ?? 'No rationale available yet.'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="conversation-media-inline">
-                <h3>Call player</h3>
-                {audio ? (
-                  <>
-                    <p className="muted">Listen and follow along with live subtitles.</p>
+                {detailTab === 'player' ? (
+                  <div className="conversation-media-inline workspace-player-panel">
+                    <h3>Call Player</h3>
+                    {audio ? (
+                      <>
+                        <p className="muted">Listen and follow along with live subtitles.</p>
                     <audio
                       ref={audioRef}
                       preload="metadata"
@@ -929,41 +1089,82 @@ export function ConversationsPage() {
                       <p>{activeTurn?.text || 'Subtitles will appear when playback starts.'}</p>
                     </div>
                   </>
-                ) : (
-                  <p className="muted">Audio not available for this conversation.</p>
-                )}
-              </div>
+                  ) : (
+                    <p className="muted">Audio not available for this conversation.</p>
+                  )}
+                </div>
+              ) : null}
 
-              <div>
-                <h3>Subtitles</h3>
-                {detail.turns.length === 0 ? (
-                  <p className="muted">No turns available.</p>
-                ) : (
-                  <ul className="turns compact subtitles-list" ref={subtitleListRef}>
-                    {turnsForPlayback.map((turn, index) => (
-                      <li
-                        key={turn.id}
-                        data-turn-index={index}
-                        className={activeTurnIndex === index ? 'is-active' : ''}
-                        onDoubleClick={() => {
-                          void seekToSecond(turn.startSec)
-                        }}
-                        title="Double-click to jump audio here"
-                      >
-                        <strong>{turn.role}</strong>
-                        <p>{turn.text || '...'}</p>
-                        <small>{formatClock(turn.startSec)}</small>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              {detailTab === 'transcript' ? (
+                <div className="transcript-panel">
+                  <div className="transcript-header-row">
+                    <h3>Transcript</h3>
+                    <Link to={`/conversations/${detail.id}`} className="muted">
+                      View full transcript
+                    </Link>
+                  </div>
+                  {detail.turns.length === 0 ? (
+                    <p className="muted">No turns available.</p>
+                  ) : (
+                    <ul className="turns compact transcript-thread" ref={subtitleListRef}>
+                      {turnsForPlayback.map((turn, index) => (
+                        <li
+                          key={turn.id}
+                          data-turn-index={index}
+                          className={activeTurnIndex === index ? 'is-active' : ''}
+                          onDoubleClick={() => {
+                            void seekToSecond(turn.startSec)
+                          }}
+                          title="Double-click to jump audio here"
+                        >
+                          <div className={`transcript-message ${turn.role === 'agent' ? 'agent' : 'user'}`}>
+                            <div className="transcript-message-head">
+                              <strong>{turn.role === 'agent' ? 'Agent' : 'User'}</strong>
+                              <small>{formatClock(turn.startSec)}</small>
+                            </div>
+                            <p>{turn.text || '...'}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
 
-              <div className="conversation-insights panel">
+              {detailTab === 'metadata' ? (
+                <div className="metadata-grid">
+                  <article className="metadata-card">
+                    <small>Conversation ID</small>
+                    <strong>{detail.id}</strong>
+                  </article>
+                  <article className="metadata-card">
+                    <small>Provider</small>
+                    <strong>{formatProviderName(selectedRow.provider_name)}</strong>
+                  </article>
+                  <article className="metadata-card">
+                    <small>Agent</small>
+                    <strong>{selectedRow.provider_agent_id || 'Unknown'}</strong>
+                  </article>
+                  <article className="metadata-card">
+                    <small>Language</small>
+                    <strong>{selectedRow.language || 'Unknown'}</strong>
+                  </article>
+                  <article className="metadata-card">
+                    <small>Outcome</small>
+                    <strong>{selectedRow.outcome || 'Unknown'}</strong>
+                  </article>
+                  <article className="metadata-card">
+                    <small>Created</small>
+                    <strong>{formatConversationDate(selectedRow.created_at)}</strong>
+                  </article>
+                </div>
+              ) : null}
+
+              <div className="conversation-insights panel workspace-insights-panel">
                 <div className="conversation-insights-header">
                   <div>
                     <h3>Provider score and insights</h3>
-                    <p className="muted">Source: ElevenLabs provider data (not VaaniEval scoring).</p>
+                    <p className="muted">Source: provider data and evaluation runs.</p>
                   </div>
                   <button
                     type="button"
@@ -981,7 +1182,8 @@ export function ConversationsPage() {
                       setInsightsLoading(false)
                     }}
                   >
-                    {insightsLoading ? 'Refreshing...' : 'Refresh provider insights'}
+                    <FontAwesomeIcon icon="arrow-rotate-right" />
+                    <span>{insightsLoading ? 'Refreshing...' : 'Refresh'}</span>
                   </button>
                 </div>
 
@@ -1051,6 +1253,109 @@ export function ConversationsPage() {
             <p className="muted">Unable to load conversation preview.</p>
           )}
         </section>
+
+        <aside className="panel conversations-side-panel workspace-side-panel">
+          <div className="workspace-sticky-panel">
+            <div className="workspace-sticky-section">
+              <h3>Call Player</h3>
+              {audio ? (
+                <>
+                  <div className="player-shell player-shell-compact">
+                    <div className="player-waveform" aria-hidden="true">
+                      {waveformBars.map((bar) => (
+                        <span
+                          key={bar.id}
+                          className={`player-wave-bar ${bar.isPlayed ? 'is-played' : ''}`}
+                          style={{ height: `${Math.max(8, Math.round(bar.height * 48))}px` }}
+                        />
+                      ))}
+                    </div>
+                    <div className="player-timeline-group">
+                      <input
+                        type="range"
+                        min={0}
+                        max={effectiveDuration > 0 ? effectiveDuration : 1}
+                        step={0.1}
+                        value={Math.min(currentTime, effectiveDuration > 0 ? effectiveDuration : 1)}
+                        onChange={(event) => {
+                          const nextValue = Number(event.target.value)
+                          setCurrentTime(nextValue)
+                          if (audioRef.current) {
+                            audioRef.current.currentTime = nextValue
+                          }
+                        }}
+                      />
+                      <div className="player-time-row">
+                        <span>{formatClock(currentTime)}</span>
+                        <span>{formatClock(effectiveDuration)}</span>
+                      </div>
+                    </div>
+                    <div className="player-controls-row">
+                      <div className="player-primary-controls">
+                        <button type="button" onClick={() => void togglePlayback()} className="player-play-button">
+                          <span className="control-with-icon">
+                            <FontAwesomeIcon icon={isPlaying ? 'pause' : 'play'} />
+                          </span>
+                        </button>
+                        <button type="button" className="player-icon-button" onClick={() => shiftPlayback(-10)}>
+                          <FontAwesomeIcon icon="backward" />
+                        </button>
+                        <button type="button" className="player-icon-button" onClick={() => shiftPlayback(10)}>
+                          <FontAwesomeIcon icon="forward" />
+                        </button>
+                      </div>
+                      <div className="player-rate-row" role="group" aria-label="Playback speed">
+                        {SPEED_OPTIONS.map((speed) => (
+                          <button
+                            key={speed}
+                            type="button"
+                            className={`player-rate-chip ${playbackRate === speed ? 'active' : ''}`}
+                            onClick={() => setPlaybackRate(speed)}
+                          >
+                            {speed}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">Audio not available for this conversation.</p>
+              )}
+            </div>
+
+            <div className="workspace-sticky-section transcript-preview-section">
+              <div className="transcript-header-row">
+                <h3>Transcript Preview</h3>
+                <Link to={`/conversations/${detail?.id ?? selectedRow?.id ?? ''}`} className="muted">
+                  View full transcript
+                </Link>
+              </div>
+              {detail?.turns?.length ? (
+                <ul className="transcript-preview-list">
+                  {turnsForPlayback.slice(0, 5).map((turn, index) => (
+                    <li key={turn.id} className={turn.role === 'agent' ? 'agent' : 'user'}>
+                      <div className="transcript-preview-meta">
+                        <strong>{turn.role === 'agent' ? 'Agent' : 'User'}</strong>
+                        <span>{formatClock(turn.startSec)}</span>
+                      </div>
+                      <p>{turn.text}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No transcript available.</p>
+              )}
+            </div>
+
+            <div className="workspace-sticky-section">
+              <h3>Quick Notes</h3>
+              <p className="muted">
+                Understand why a conversation scored poorly, then jump straight into playback or transcript review.
+              </p>
+            </div>
+          </div>
+        </aside>
       </div>
 
       {error && <p className="error">{error}</p>}

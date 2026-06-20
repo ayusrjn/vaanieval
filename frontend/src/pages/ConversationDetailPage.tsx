@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { API_BASE } from '../api/client'
 import {
@@ -310,6 +310,11 @@ export function ConversationDetailPage() {
     })
   }, [conversation])
 
+  const spokenTurnsForPlayback = useMemo(
+    () => turnsForPlayback.map((turn, index) => ({ ...turn, displayIndex: index })).filter((turn) => turn.role !== 'system'),
+    [turnsForPlayback],
+  )
+
   const activeTurnIndex = useMemo(() => {
     if (turnsForPlayback.length === 0) {
       return -1
@@ -326,6 +331,7 @@ export function ConversationDetailPage() {
   }, [currentTime, turnsForPlayback])
 
   const activeTurn = activeTurnIndex >= 0 ? turnsForPlayback[activeTurnIndex] : null
+  const visibleActiveTurn = activeTurn?.role === 'system' ? spokenTurnsForPlayback[0] ?? activeTurn : activeTurn
 
   const waveformBars = useMemo(() => {
     const barCount = 96
@@ -462,316 +468,355 @@ export function ConversationDetailPage() {
   }
 
   return (
-    <section className="page conversations-workspace">
+    <section className="page conversations-detail-workspace">
       {loading ? (
         <div className="panel">
           <p className="muted">Loading conversation...</p>
         </div>
       ) : conversation ? (
         <>
-          <header className="conversations-header panel">
-            <div>
+          <header className="panel detail-hero-panel">
+            <div className="detail-hero-copy">
+              <span className="detail-kicker">Conversation detail</span>
               <h1>{formatConversationTitle(insights?.started_at_unix ?? null)}</h1>
-              <p className="muted">Agent: {insights?.assistant_name || 'Voice assistant'}</p>
+              <p className="muted">
+                Provider: {evaluationRun?.provider_name || 'Unknown'} · Agent: {insights?.assistant_name || 'Voice assistant'} · Duration: {formatClock(effectiveDuration)} · ID: {conversation.id}
+              </p>
+            </div>
+            <div className="detail-hero-actions">
+              <Link className="secondary detail-back-link" to="/conversations">
+                Back to conversations
+              </Link>
+              <button type="button" className="secondary" onClick={() => void refreshLatestEvaluation()} disabled={evaluationLoading}>
+                {evaluationLoading ? 'Refreshing...' : 'Refresh latest'}
+              </button>
+              <button type="button" onClick={() => setShowEvalModal(true)} disabled={evaluationLoading}>
+                {evaluationLoading ? 'Running...' : 'Run evaluation'}
+              </button>
             </div>
           </header>
 
-          <div className="conversation-insights panel">
-            <div className="conversation-insights-header">
-              <h3>Evaluation scores</h3>
-              <div className="inline">
-                <button type="button" className="secondary" onClick={() => void refreshLatestEvaluation()} disabled={evaluationLoading}>
-                  {evaluationLoading ? 'Refreshing...' : 'Refresh latest'}
-                </button>
-                <button type="button" onClick={() => setShowEvalModal(true)} disabled={evaluationLoading}>
-                  {evaluationLoading ? 'Running...' : 'Run evaluation'}
-                </button>
-              </div>
-            </div>
-            {evaluationRun ? (
-              <>
-                <p className="muted">
-                  Status: {evaluationRun.status}
-                  {evaluationRun.provider_name ? ` · ${evaluationRun.provider_name}` : ''}
-                  {evaluationRun.provider_model ? ` · ${evaluationRun.provider_model}` : ''}
-                </p>
-                {evaluationRun.created_at && (
-                  <p className="muted" style={{ fontSize: '0.85rem', marginTop: '-6px' }}>
-                    Last evaluated: {new Date(evaluationRun.created_at).toLocaleString()}
-                  </p>
-                )}
-                {evaluationRun.error_message ? <p className="error">{evaluationRun.error_message}</p> : null}
-              </>
-            ) : (
-              <p className="muted">No evaluation run found yet for this conversation.</p>
-            )}
-            {evaluationRun?.status === 'queued' || evaluationRun?.status === 'running' ? (
-              <div className="evaluation-status-banner">
-                <strong>Scoring in progress</strong>
-                <span>Polling latest results automatically.</span>
-              </div>
-            ) : null}
+          <div className="detail-summary-grid">
+            <article className={`detail-score-card ${getScoreTone(evaluationSummaryScore)}`}>
+              <small>Overall evaluation score</small>
+              <p>{evaluationSummaryScore == null ? '--' : `${evaluationSummaryScore}/100`}</p>
+              <span className="muted">Average across the four evaluation metrics.</span>
+            </article>
 
-            <div className="evaluation-summary">
-              <article className={`evaluation-summary-card ${getScoreTone(evaluationSummaryScore)}`}>
-                <small>Overall evaluation score</small>
-                <p>{evaluationSummaryScore == null ? '--' : `${evaluationSummaryScore}/100`}</p>
-                <span className="muted">Average across the four evaluation metrics.</span>
-              </article>
-
-              <div className="quality-signals-grid">
-                {evaluationMetrics.map((metric) => (
-                  <article key={metric.key}>
-                    <small>{metric.label}</small>
-                    <p className={getScoreTone(metric.score)}>{metric.score == null ? '-' : `${metric.score}/100`}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-
-            <table className="evaluation-table">
-              <thead>
-                <tr>
-                  <th>Metric</th>
-                  <th>Score</th>
-                  <th>Rationale</th>
-                </tr>
-              </thead>
-              <tbody>
-                {evaluationMetrics.map((metric) => (
-                  <tr key={metric.key}>
-                    <td>{metric.label}</td>
-                    <td>
-                      <span className={`score-pill ${getScoreTone(metric.score)}`}>
-                        {metric.score == null ? '-' : `${metric.score}/100`}
-                      </span>
-                    </td>
-                    <td>{metric.rationale ?? 'No rationale available yet.'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="conversation-media-inline">
-            <h3>Call player</h3>
-            {audio ? (
-              <>
-                <p className="muted">Listen and follow along with live subtitles.</p>
-                <audio
-                  ref={audioRef}
-                  preload="metadata"
-                  crossOrigin="use-credentials"
-                  src={streamUrl}
-                  onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-                  onLoadedMetadata={(event) => {
-                    const nextDuration = Number.isFinite(event.currentTarget.duration)
-                      ? event.currentTarget.duration
-                      : (audio.duration_ms ?? 0) / 1000
-                    setDuration(nextDuration)
-                  }}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={() => setIsPlaying(false)}
-                >
-                  <track kind="captions" />
-                </audio>
-
-                <div className="player-shell">
-                  <div className="player-waveform" aria-hidden="true">
-                    {waveformBars.map((bar) => (
-                      <span
-                        key={bar.id}
-                        className={`player-wave-bar ${bar.isPlayed ? 'is-played' : ''}`}
-                        style={{ height: `${Math.max(8, Math.round(bar.height * 48))}px` }}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="player-timeline-group">
-                    <input
-                      type="range"
-                      min={0}
-                      max={effectiveDuration > 0 ? effectiveDuration : 1}
-                      step={0.1}
-                      value={Math.min(currentTime, effectiveDuration > 0 ? effectiveDuration : 1)}
-                      onChange={(event) => {
-                        const nextValue = Number(event.target.value)
-                        setCurrentTime(nextValue)
-                        if (audioRef.current) {
-                          audioRef.current.currentTime = nextValue
-                        }
-                      }}
+            <div className="detail-metric-grid">
+              {evaluationMetrics.map((metric) => (
+                <article key={metric.key} className="detail-metric-card">
+                  <small>{metric.label}</small>
+                  <span className={`score-pill ${getScoreTone(metric.score)} detail-metric-value`}>
+                    {metric.score == null ? '-' : `${metric.score}/100`}
+                  </span>
+                  <div className="metric-progress-track">
+                    <span
+                      className={`metric-progress-bar ${getScoreTone(metric.score)}`}
+                      style={{ width: `${metric.score ?? 0}%` }}
                     />
-                    <div className="player-time-row">
-                      <span>{formatClock(currentTime)}</span>
-                      <span>{formatClock(effectiveDuration)}</span>
-                    </div>
                   </div>
-
-                  <div className="player-controls-row">
-                    <div className="player-primary-controls">
-                      <button type="button" onClick={() => void togglePlayback()} className="player-play-button">
-                        <span className="control-with-icon">
-                          <FontAwesomeIcon icon={isPlaying ? 'pause' : 'play'} />
-                          <span>{isPlaying ? 'Pause' : 'Play'}</span>
-                        </span>
-                      </button>
-                      <button type="button" className="player-icon-button" onClick={() => shiftPlayback(-10)}>
-                        <span className="control-with-icon">
-                          <FontAwesomeIcon icon="backward" />
-                          <span>Back 10s</span>
-                        </span>
-                      </button>
-                      <button type="button" className="player-icon-button" onClick={() => shiftPlayback(10)}>
-                        <span className="control-with-icon">
-                          <FontAwesomeIcon icon="forward" />
-                          <span>Forward 10s</span>
-                        </span>
-                      </button>
-                    </div>
-
-                    <div className="player-rate-row" role="group" aria-label="Playback speed">
-                      {SPEED_OPTIONS.map((speed) => (
-                        <button
-                          key={speed}
-                          type="button"
-                          className={`player-rate-chip ${playbackRate === speed ? 'active' : ''}`}
-                          onClick={() => setPlaybackRate(speed)}
-                        >
-                          {speed}x
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="player-meta-row">
-                    <span>Now playing</span>
-                    <span>{isPlaying ? 'Audio is playing' : 'Audio is paused'}</span>
-                  </div>
-                </div>
-
-                <div className="active-subtitle">
-                  <small>{activeTurn?.role ?? 'Speaker'}</small>
-                  <p>{activeTurn?.text || 'Subtitles will appear when playback starts.'}</p>
-                </div>
-              </>
-            ) : (
-              <p className="muted">Audio not available for this conversation.</p>
-            )}
-          </div>
-
-          <div className="panel">
-            <h3>Subtitles</h3>
-            {turnsForPlayback.length === 0 ? (
-              <p className="muted">No turns available.</p>
-            ) : (
-              <ul className="turns compact subtitles-list" ref={subtitleListRef}>
-                {turnsForPlayback.map((turn, index) => (
-                  <li
-                    key={turn.id}
-                    data-turn-index={index}
-                    className={activeTurnIndex === index ? 'is-active' : ''}
-                    onDoubleClick={() => {
-                      void seekToSecond(turn.startSec)
-                    }}
-                    title="Double-click to jump audio here"
-                  >
-                    <strong>{turn.role}</strong>
-                    <p>{turn.text || '...'}</p>
-                    <small>{formatClock(turn.startSec)}</small>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="conversation-insights panel">
-            <div className="conversation-insights-header">
-              <div>
-                <h3>Provider score and insights</h3>
-                <p className="muted">Source: ElevenLabs provider data (not VaaniEval scoring).</p>
-              </div>
-              <button
-                type="button"
-                className="secondary"
-                disabled={insightsLoading || !conversationId}
-                onClick={async () => {
-                  if (!conversationId) {
-                    return
-                  }
-                  setInsightsLoading(true)
-                  const updated = await getConversationInsights(conversationId, true).catch(() => null)
-                  if (updated) {
-                    setInsights(updated)
-                  }
-                  setInsightsLoading(false)
-                }}
-              >
-                {insightsLoading ? 'Refreshing...' : 'Refresh provider insights'}
-              </button>
+                </article>
+              ))}
             </div>
+          </div>
 
-            {insights ? (
-              <>
-                <div className="conversation-kpis">
-                  <article>
-                    <small>Call result</small>
-                    <p>{insights.call_result || 'Unknown'}</p>
-                  </article>
-                  <article>
-                    <small>Status</small>
-                    <p>{insights.call_status || 'Unknown'}</p>
-                  </article>
-                  <article>
-                    <small>Started</small>
-                    <p>{formatCallDate(insights.started_at_unix)}</p>
-                  </article>
-                  <article>
-                    <small>Environment</small>
-                    <p>{insights.environment || 'Unknown'}</p>
-                  </article>
+          <div className="detail-workspace-grid">
+            <main className="detail-main-column">
+              <section className="panel detail-section">
+                <div className="detail-section-header">
+                  <div>
+                    <h3>Evaluation breakdown</h3>
+                    <p className="muted">Status: {evaluationRun?.status ?? 'unknown'}{evaluationRun?.provider_name ? ` · ${evaluationRun.provider_name}` : ''}{evaluationRun?.provider_model ? ` · ${evaluationRun.provider_model}` : ''}</p>
+                  </div>
+                  {evaluationRun?.created_at ? <p className="muted detail-timestamp">Last evaluated: {new Date(evaluationRun.created_at).toLocaleString()}</p> : null}
                 </div>
 
-                {(insights.summary_title || insights.summary_text) && (
-                  <div className="insight-block">
-                    <h4>{insights.summary_title || 'Call summary'}</h4>
-                    <p>{insights.summary_text || 'No summary available yet.'}</p>
+                {evaluationRun?.status === 'queued' || evaluationRun?.status === 'running' ? (
+                  <div className="evaluation-status-banner">
+                    <strong>Scoring in progress</strong>
+                    <span>Polling latest results automatically.</span>
                   </div>
-                )}
+                ) : null}
 
-                {insights.end_reason && (
-                  <div className="insight-block">
-                    <h4>How the call ended</h4>
-                    <p>{insights.end_reason}</p>
-                  </div>
-                )}
+                {evaluationRun?.error_message ? <p className="error">{evaluationRun.error_message}</p> : null}
 
-                {insights.quality_signals.length > 0 && (
-                  <div className="quality-signals-grid">
-                    {insights.quality_signals.map((signal) => (
-                      <article key={signal.label}>
-                        <small>{signal.label}</small>
-                        <p>{signal.value}</p>
-                      </article>
+                <table className="evaluation-table detail-evaluation-table">
+                  <thead>
+                    <tr>
+                      <th>Metric</th>
+                      <th>Score</th>
+                      <th>Rationale</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {evaluationMetrics.map((metric) => (
+                      <tr key={metric.key}>
+                        <td>{metric.label}</td>
+                        <td>
+                          <span className={`score-pill ${getScoreTone(metric.score)}`}>
+                            {metric.score == null ? '-' : `${metric.score}/100`}
+                          </span>
+                        </td>
+                        <td>{metric.rationale ?? 'No rationale available yet.'}</td>
+                      </tr>
                     ))}
-                  </div>
-                )}
+                  </tbody>
+                </table>
+              </section>
 
-                {insights.warnings.length > 0 && (
-                  <div className="insight-block warnings-block">
-                    <h4>Attention points</h4>
-                    <ul>
-                      {insights.warnings.map((warning) => (
-                        <li key={warning}>{warning}</li>
+              <section className="conversation-insights panel detail-section">
+                <div className="conversation-insights-header">
+                  <div>
+                    <h3>Provider score and insights</h3>
+                    <p className="muted">Source: ElevenLabs provider data (not VaaniEval scoring).</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={insightsLoading || !conversationId}
+                    onClick={async () => {
+                      if (!conversationId) {
+                        return
+                      }
+                      setInsightsLoading(true)
+                      const updated = await getConversationInsights(conversationId, true).catch(() => null)
+                      if (updated) {
+                        setInsights(updated)
+                      }
+                      setInsightsLoading(false)
+                    }}
+                  >
+                    {insightsLoading ? 'Refreshing...' : 'Refresh provider insights'}
+                  </button>
+                </div>
+
+                {insights ? (
+                  <>
+                    <div className="conversation-kpis">
+                      <article>
+                        <small>Call result</small>
+                        <p>{insights.call_result || 'Unknown'}</p>
+                      </article>
+                      <article>
+                        <small>Status</small>
+                        <p>{insights.call_status || 'Unknown'}</p>
+                      </article>
+                      <article>
+                        <small>Started</small>
+                        <p>{formatCallDate(insights.started_at_unix)}</p>
+                      </article>
+                      <article>
+                        <small>Environment</small>
+                        <p>{insights.environment || 'Unknown'}</p>
+                      </article>
+                    </div>
+
+                    {(insights.summary_title || insights.summary_text) && (
+                      <div className="insight-block">
+                        <h4>{insights.summary_title || 'Call summary'}</h4>
+                        <p>{insights.summary_text || 'No summary available yet.'}</p>
+                      </div>
+                    )}
+
+                    {insights.end_reason && (
+                      <div className="insight-block">
+                        <h4>How the call ended</h4>
+                        <p>{insights.end_reason}</p>
+                      </div>
+                    )}
+
+                    {insights.quality_signals.length > 0 && (
+                      <div className="quality-signals-grid">
+                        {insights.quality_signals.map((signal) => (
+                          <article key={signal.label}>
+                            <small>{signal.label}</small>
+                            <p>{signal.value}</p>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+
+                    {insights.warnings.length > 0 && (
+                      <div className="insight-block warnings-block">
+                        <h4>Attention points</h4>
+                        <ul>
+                          {insights.warnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="muted">No provider insights available yet for this call.</p>
+                )}
+              </section>
+            </main>
+
+            <aside className="detail-side-column">
+              <div className="detail-rail-sticky">
+                <section className="panel detail-section detail-player-section">
+                  <h3>Call player</h3>
+                  {audio ? (
+                    <>
+                      <p className="muted">Listen and follow along with live subtitles.</p>
+                      <audio
+                        ref={audioRef}
+                        preload="metadata"
+                        crossOrigin="use-credentials"
+                        src={streamUrl}
+                        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+                        onLoadedMetadata={(event) => {
+                          const nextDuration = Number.isFinite(event.currentTarget.duration)
+                            ? event.currentTarget.duration
+                            : (audio.duration_ms ?? 0) / 1000
+                          setDuration(nextDuration)
+                        }}
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onEnded={() => setIsPlaying(false)}
+                      >
+                        <track kind="captions" />
+                      </audio>
+
+                      <div className="player-shell player-shell-compact">
+                        <div className="player-waveform" aria-hidden="true">
+                          {waveformBars.map((bar) => (
+                            <span
+                              key={bar.id}
+                              className={`player-wave-bar ${bar.isPlayed ? 'is-played' : ''}`}
+                              style={{ height: `${Math.max(8, Math.round(bar.height * 48))}px` }}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="player-timeline-group">
+                          <input
+                            type="range"
+                            min={0}
+                            max={effectiveDuration > 0 ? effectiveDuration : 1}
+                            step={0.1}
+                            value={Math.min(currentTime, effectiveDuration > 0 ? effectiveDuration : 1)}
+                            onChange={(event) => {
+                              const nextValue = Number(event.target.value)
+                              setCurrentTime(nextValue)
+                              if (audioRef.current) {
+                                audioRef.current.currentTime = nextValue
+                              }
+                            }}
+                          />
+                          <div className="player-time-row">
+                            <span>{formatClock(currentTime)}</span>
+                            <span>{formatClock(effectiveDuration)}</span>
+                          </div>
+                        </div>
+
+                        <div className="player-controls-row">
+                          <div className="player-primary-controls">
+                            <button type="button" onClick={() => void togglePlayback()} className="player-play-button">
+                              <span className="control-with-icon">
+                                <FontAwesomeIcon icon={isPlaying ? 'pause' : 'play'} />
+                                <span>{isPlaying ? 'Pause' : 'Play'}</span>
+                              </span>
+                            </button>
+                            <button type="button" className="player-icon-button" onClick={() => shiftPlayback(-10)}>
+                              <span className="control-with-icon">
+                                <FontAwesomeIcon icon="backward" />
+                                <span>Back 10s</span>
+                              </span>
+                            </button>
+                            <button type="button" className="player-icon-button" onClick={() => shiftPlayback(10)}>
+                              <span className="control-with-icon">
+                                <FontAwesomeIcon icon="forward" />
+                                <span>Forward 10s</span>
+                              </span>
+                            </button>
+                          </div>
+
+                          <div className="player-rate-row" role="group" aria-label="Playback speed">
+                            {SPEED_OPTIONS.map((speed) => (
+                              <button
+                                key={speed}
+                                type="button"
+                                className={`player-rate-chip ${playbackRate === speed ? 'active' : ''}`}
+                                onClick={() => setPlaybackRate(speed)}
+                              >
+                                {speed}x
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="player-meta-row">
+                          <span>Now playing</span>
+                          <span>{isPlaying ? 'Audio is playing' : 'Audio is paused'}</span>
+                        </div>
+                      </div>
+
+                      <div className="active-subtitle">
+                        <small>{visibleActiveTurn?.role ?? 'Speaker'}</small>
+                        <p>{visibleActiveTurn?.text || 'Subtitles will appear when playback starts.'}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="muted">Audio not available for this conversation.</p>
+                  )}
+                </section>
+
+                <section className="panel detail-section transcript-preview-section">
+                  <div className="transcript-header-row">
+                    <h3>Transcript</h3>
+                    <a href="#subtitles" className="muted">
+                      Jump to subtitles
+                    </a>
+                  </div>
+                  {turnsForPlayback.length === 0 ? (
+                    <p className="muted">No turns available.</p>
+                  ) : (
+                    <ul className="turns compact subtitles-list" ref={subtitleListRef} id="subtitles">
+                      {spokenTurnsForPlayback.map((turn) => (
+                        <li
+                          key={turn.id}
+                          data-turn-index={turn.displayIndex}
+                          className={activeTurnIndex === turn.displayIndex ? 'is-active' : ''}
+                          onDoubleClick={() => {
+                            void seekToSecond(turn.startSec)
+                          }}
+                          title="Double-click to jump audio here"
+                        >
+                          <strong>{turn.role}</strong>
+                          <p>{turn.text || '...'}</p>
+                          <small>{formatClock(turn.startSec)}</small>
+                        </li>
                       ))}
                     </ul>
+                  )}
+                </section>
+
+                <section className="panel detail-section">
+                  <h3>Quick facts</h3>
+                  <div className="detail-facts-grid">
+                    <article>
+                      <small>Conversation ID</small>
+                      <strong>{conversation.id}</strong>
+                    </article>
+                    <article>
+                      <small>Provider</small>
+                      <strong>{insights?.environment || 'Unknown'}</strong>
+                    </article>
+                    <article>
+                      <small>Agent</small>
+                      <strong>{insights?.assistant_name || 'Voice assistant'}</strong>
+                    </article>
+                    <article>
+                      <small>Duration</small>
+                      <strong>{formatClock(effectiveDuration)}</strong>
+                    </article>
                   </div>
-                )}
-              </>
-            ) : (
-              <p className="muted">No provider insights available yet for this call.</p>
-            )}
+                </section>
+              </div>
+            </aside>
           </div>
         </>
       ) : (
