@@ -1,6 +1,7 @@
 # VaaniEval
 
 Production evaluation platform for voice agents.
+Production evaluation platform for voice agents.
 
 VaaniEval is an open-source evaluation stack for teams that want to measure real conversation quality using production data across both ElevenLabs and Vapi.
 
@@ -87,6 +88,17 @@ Services:
 - Backend worker: required for imports and evaluations (started by `start-dev` scripts)
 
 If you start services manually, run the worker in a second terminal from `backend/`:
+chmod +x start-dev.sh
+./start-dev.sh
+```
+
+Services:
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- Backend worker: required for imports and evaluations (started by `start-dev` scripts)
+
+If you start services manually, run the worker in a second terminal from `backend/`:
 
 ```bash
 python -m app.worker
@@ -117,6 +129,9 @@ Highlights:
 - [Docs Index](docs/index.md)
 - [Development Guide](docs/development.md)
 - [Backend Architecture](docs/backend-architecture.md)
+- [Docs Index](docs/index.md)
+- [Development Guide](docs/development.md)
+- [Backend Architecture](docs/backend-architecture.md)
 
 ## Contributing
 
@@ -125,7 +140,14 @@ Contributions are welcome. Start with local setup from [docs/development.md](doc
 - Clear problem statement
 - Screenshots for UI changes
 - Notes on migrations, jobs, or API behavior changes
+Contributions are welcome. Start with local setup from [docs/development.md](docs/development.md), then open a PR with:
+
+- Clear problem statement
+- Screenshots for UI changes
+- Notes on migrations, jobs, or API behavior changes
 
 ## License
+
+[LICENSE](LICENSE)
 
 [LICENSE](LICENSE)
