@@ -1,19 +1,39 @@
-# VaaniEval
+<p align="center">
+	<img src="docs/assets/screenshots/twitter_banner.png" alt="VaaniEval banner" width="100%">
+</p>
 
-Production evaluation platform for voice agents.
-Production evaluation platform for voice agents.
+<h1 align="center">VaaniEval</h1>
 
-VaaniEval is an open-source evaluation stack for teams that want to measure real conversation quality using production data across both ElevenLabs and Vapi.
+<p align="center">
+	Open-source evaluation platform for Voice AI agents.
+</p>
+
+<p align="center">
+	<a href="docs/quickstart.md">Quickstart</a> |
+	<a href="docs/development.md">Development</a> |
+	<a href="docs/backend-architecture.md">Architecture</a> |
+	<a href="docs/metrics-and-gates.md">Metrics</a> |
+	<a href="docs/v2-plan/README.md">V2 Plan</a>
+</p>
+
+<p align="center">
+	<a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
+	<a href="pyproject.toml"><img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-blue.svg"></a>
+	<a href="frontend/package.json"><img alt="Frontend" src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-00bcd4.svg"></a>
+	<a href="backend/README.md"><img alt="Backend" src="https://img.shields.io/badge/Backend-FastAPI-009688.svg"></a>
+</p>
+
+VaaniEval is an open-source evaluation stack for teams that measure real conversation quality with production data from ElevenLabs and Vapi.
 
 ## Why VaaniEval
 
-Most voice teams need more than a single pass/fail number. They need replayable evidence, clear score breakdowns, and a workflow that helps QA, product, and engineering ship improvements faster.
+Most voice teams need more than a pass or fail result. They need replayable evidence, metric-level rationales, and workflows that help QA, product, and engineering ship improvements faster.
 
 VaaniEval gives you:
 
-- Real conversation ingestion (historical + ongoing imports)
-- Conversation review workspace with transcript + audio playback
-- Evaluation runs with metric-level rationale
+- Real conversation ingestion (historical and ongoing imports)
+- Conversation review workspace with transcript and audio playback
+- Evaluation runs with score breakdowns and rationale
 - Configurable voice providers and evaluator providers
 - Queue-backed processing for reliability at scale
 
@@ -23,13 +43,13 @@ VaaniEval gives you:
 - Backend API: FastAPI + SQLAlchemy
 - Worker: DB-backed async job processing
 - Voice providers: ElevenLabs and Vapi
-- Evaluation provider: configurable, with OpenAI-first defaults
-- Storage: SQLite in local dev (extensible to managed DB)
+- Evaluation provider: configurable, OpenAI-first defaults
+- Storage: SQLite in local development (extensible to managed databases)
 
 ## Screenshots
 
 <details>
-<summary>Screenshots</summary>
+<summary>Show screenshots</summary>
 
 ### Conversations Overview
 
@@ -45,20 +65,7 @@ VaaniEval gives you:
 
 </details>
 
-## Demo
-
-<details>
-<summary>Walkthrough</summary>
-
-The repo does not include a bundled demo video yet, so this section stays lightweight and easy to expand later.
-
-- Start the app from [docs/development.md](docs/development.md)
-- Connect either ElevenLabs or Vapi from the provider settings page
-- Import conversations, review scores, and inspect transcripts in the conversations workspace
-
-</details>
-
-## Quick Start (V2)
+## Quick Start
 
 For full setup and troubleshooting, see [docs/development.md](docs/development.md).
 
@@ -85,20 +92,9 @@ Services:
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000
-- Backend worker: required for imports and evaluations (started by `start-dev` scripts)
+- Backend worker: started by the start scripts, required for imports and evaluations
 
-If you start services manually, run the worker in a second terminal from `backend/`:
-chmod +x start-dev.sh
-./start-dev.sh
-```
-
-Services:
-
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- Backend worker: required for imports and evaluations (started by `start-dev` scripts)
-
-If you start services manually, run the worker in a second terminal from `backend/`:
+If you run services manually, start the worker in a second terminal from backend:
 
 ```bash
 python -m app.worker
@@ -106,18 +102,18 @@ python -m app.worker
 
 ## Architecture
 
-For detailed backend internals, see [docs/backend-architecture.md](docs/backend-architecture.md).
+For backend internals, see [docs/backend-architecture.md](docs/backend-architecture.md).
 
-Provider support is adapter-based, so adding another voice platform follows the same factory + adapter pattern used for ElevenLabs and Vapi.
+Provider support is adapter-based, so adding another voice platform follows the same factory and adapter pattern used for ElevenLabs and Vapi.
 
 Highlights:
 
-- Multi-layer backend (`api`, `services`, `models`, `worker`)
+- Multi-layer backend (api, services, models, worker)
 - Queue-driven ingestion and scoring jobs
 - Conversation and evaluation run lifecycle tracking
 - Encrypted provider credential support
 
-## V2 Planning and Direction
+## V2 Planning
 
 - [V2 Plan Overview](docs/v2-plan/README.md)
 - [V2 Roadmap](docs/v2-plan/roadmap.md)
@@ -127,27 +123,20 @@ Highlights:
 ## Documentation
 
 - [Docs Index](docs/index.md)
+- [Quickstart](docs/quickstart.md)
 - [Development Guide](docs/development.md)
 - [Backend Architecture](docs/backend-architecture.md)
-- [Docs Index](docs/index.md)
-- [Development Guide](docs/development.md)
-- [Backend Architecture](docs/backend-architecture.md)
+- [Metrics and Gates](docs/metrics-and-gates.md)
+- [CLI and API](docs/cli-and-api.md)
 
 ## Contributing
 
 Contributions are welcome. Start with local setup from [docs/development.md](docs/development.md), then open a PR with:
 
-- Clear problem statement
-- Screenshots for UI changes
-- Notes on migrations, jobs, or API behavior changes
-Contributions are welcome. Start with local setup from [docs/development.md](docs/development.md), then open a PR with:
-
-- Clear problem statement
+- A clear problem statement
 - Screenshots for UI changes
 - Notes on migrations, jobs, or API behavior changes
 
 ## License
 
-[LICENSE](LICENSE)
-
-[LICENSE](LICENSE)
+[MIT License](LICENSE)
