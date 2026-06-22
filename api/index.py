@@ -3,30 +3,14 @@
 import sys
 import os
 
-# Try multiple paths to find backend directory
-possible_paths = [
-    os.path.join(os.path.dirname(__file__), '..', 'backend'),  # Relative path
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'backend'),  # Absolute then relative
-    '/var/task/backend',  # Vercel function root  
-    '/tmp/backend',  # Temp directory
-]
+# Add both paths to support different import styles
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+backend_dir = os.path.join(project_root, 'backend')
 
-for backend_path in possible_paths:
-    if os.path.exists(backend_path) and os.path.isdir(backend_path):
-        sys.path.insert(0, backend_path)
-        break
-else:
-    # If no backend found, add current directory and parent
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add paths in order: backend first (for app.* imports), then project root (for backend.* imports)
+sys.path.insert(0, backend_dir)
+sys.path.insert(0, project_root)
 
-try:
-    from app.main import app
-except ImportError as e:
-    # Debug: print import error
-    import traceback
-    print(f"Failed to import app: {e}", file=sys.stderr)
-    traceback.print_exc()
-    raise
+from app.main import app
 
 __all__ = ["app"]
