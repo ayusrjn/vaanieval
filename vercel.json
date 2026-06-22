@@ -4,11 +4,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "dest": "/backend/api/index.py"
     },
     {
       "src": "/health/(.*)",
-      "dest": "/api/index.py"
+      "dest": "/backend/api/index.py"
     },
     {
       "handle": "filesystem"
