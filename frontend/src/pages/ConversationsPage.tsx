@@ -8,7 +8,6 @@ import {
   getConversationInsights,
   getLatestConversationEvaluation,
   listConversations,
-  runConversationEvaluation,
 } from '../api/endpoints'
 import { PageHeader } from '../components/PageHeader'
 import type {
@@ -43,14 +42,6 @@ function formatConversationTitle(createdAt: string) {
     return 'Conversation'
   }
   return `Conversation on ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-}
-
-function formatConversationCardTitle(createdAt: string, index: number) {
-  const date = new Date(createdAt)
-  if (Number.isNaN(date.getTime())) {
-    return `Call ${index + 1}`
-  }
-  return `Call ${index + 1} · ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
 function getConversationDisplayDate(row: ConversationListItem) {
@@ -145,7 +136,6 @@ export function ConversationsPage() {
     }
   }
   const [insightsLoading, setInsightsLoading] = useState(false)
-  const [evaluationLoading, setEvaluationLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -601,19 +591,6 @@ export function ConversationsPage() {
         ? 'score-summary-warning'
         : 'score-summary-success'
 
-  const getScoreToneClass = (score: number | null) => {
-    if (score == null) {
-      return 'score-neutral'
-    }
-    if (score >= 75) {
-      return 'score-strong'
-    }
-    if (score >= 60) {
-      return 'score-warning'
-    }
-    return 'score-risk'
-  }
-
   const listEvaluationSummary = useMemo(() => {
     const summary: Record<string, { 
       overall: number | null
@@ -689,37 +666,6 @@ export function ConversationsPage() {
   useEffect(() => {
     setDetailTab('score')
   }, [selectedId])
-
-  const refreshLatestEvaluation = async () => {
-    if (!selectedId) {
-      return
-    }
-    setEvaluationLoading(true)
-    const latest = await getLatestConversationEvaluation(selectedId).catch(() => null)
-    setEvaluationRun((current) => mergeEvaluationForDisplay(current, latest))
-    if (latest) {
-      setListEvaluations((current) => ({ ...current, [selectedId]: latest }))
-    }
-    setEvaluationLoading(false)
-  }
-
-  const runEvaluation = async () => {
-    if (!selectedId) {
-      return
-    }
-    setEvaluationLoading(true)
-    const queued = await runConversationEvaluation(selectedId).catch(() => null)
-    if (queued) {
-      setEvaluationRun((current) => mergeEvaluationForDisplay(current, queued))
-      setListEvaluations((current) => ({ ...current, [selectedId]: queued }))
-    }
-    const latest = await getLatestConversationEvaluation(selectedId).catch(() => null)
-    setEvaluationRun((current) => mergeEvaluationForDisplay(current, latest))
-    if (latest) {
-      setListEvaluations((current) => ({ ...current, [selectedId]: latest }))
-    }
-    setEvaluationLoading(false)
-  }
 
   return (
     <section className="page conversations-workspace workspace-page">
@@ -812,7 +758,7 @@ export function ConversationsPage() {
             <p className="muted">No conversations match your filters.</p>
           ) : (
             <ul className="conversations-list" role="listbox" aria-label="Conversations">
-              {scoreFilteredRows.map((row, index) => {
+              {scoreFilteredRows.map((row) => {
                 const selected = row.id === selectedId
                 const evalSummary = listEvaluationSummary[row.id]
                 const isEvalLoading = listEvaluationLoading[row.id] ?? false
@@ -1333,7 +1279,7 @@ export function ConversationsPage() {
               </div>
               {detail?.turns?.length ? (
                 <ul className="transcript-preview-list">
-                  {turnsForPlayback.slice(0, 5).map((turn, index) => (
+                  {turnsForPlayback.slice(0, 5).map((turn) => (
                     <li key={turn.id} className={turn.role === 'agent' ? 'agent' : 'user'}>
                       <div className="transcript-preview-meta">
                         <strong>{turn.role === 'agent' ? 'Agent' : 'User'}</strong>

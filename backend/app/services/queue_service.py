@@ -84,3 +84,35 @@ def mark_job_failed(db: Session, job: JobQueue, error_message: str) -> None:
     job.lease_owner = None
     job.leased_until = None
     db.flush()
+
+
+def recover_stale_leases(db: Session, *, stale_after_seconds: int = 120) -> int:
+    """
+    Recover jobs that were leased but never completed (crashed workers).
+    Resets their status to PENDING so they can be picked up again.
+    Returns count of recovered jobs.
+    """
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(seconds=stale_after_seconds)
+
+    stmt = select(JobQueue).where(
+        and_(
+            JobQueue.status == JobStatus.LEASED.value,
+            JobQueue.leased_until <= stale_cutoff,
+        )
+    )
+
+    stale_jobs = db.scalars(stmt).all()
+    recovered_count = 0
+
+    for job in stale_jobs:
+        job.status = JobStatus.PENDING.value
+        job.lease_owner = None
+        job.leased_until = None
+        recovered_count += 1
+
+    if recovered_count > 0:
+        db.flush()
+
+    return recovered_count
+

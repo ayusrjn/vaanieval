@@ -5,6 +5,7 @@ import socket
 import time
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.evaluation import ConversationEvaluationRun
@@ -17,7 +18,12 @@ from app.services.import_service import (
     run_import_page_fetch,
 )
 from app.services.evaluation_service import EVAL_CONVERSATION_SCORES, run_evaluation_job
-from app.services.queue_service import lease_next_job, mark_job_failed, mark_job_succeeded
+from app.services.queue_service import (
+    lease_next_job,
+    mark_job_failed,
+    mark_job_succeeded,
+    recover_stale_leases,
+)
 
 
 def process_job(db, job: JobQueue) -> None:
@@ -84,6 +90,11 @@ def worker_loop(poll_seconds: float = 1.0) -> None:
     while True:
         db = SessionLocal()
         try:
+            # Recover stale leases first (crashed workers)
+            recover_stale_leases(db, stale_after_seconds=120)
+            db.commit()
+            
+            # Process one job per iteration
             job = lease_next_job(db, owner=owner)
             if not job:
                 db.commit()
@@ -112,6 +123,62 @@ def worker_loop(poll_seconds: float = 1.0) -> None:
             time.sleep(poll_seconds)
         finally:
             db.close()
+
+
+def process_jobs_batch(db: Session, *, max_jobs: int = 10) -> dict[str, int | list]:
+    """
+    Process up to max_jobs from the queue in a single batch.
+    Returns dict with counts and errors.
+    Used by both polling worker and Vercel Cron.
+    """
+    owner = f"worker-{socket.gethostname()}"
+    processed_count = 0
+    failed_count = 0
+    errors = []
+
+    # Recover stale leases first (crashed workers)
+    recover_stale_leases(db, stale_after_seconds=120)
+    db.flush()
+
+    for _ in range(max_jobs):
+        try:
+            job = lease_next_job(db, owner=owner)
+            if not job:
+                break
+
+            try:
+                process_job(db, job)
+                mark_job_succeeded(db, job)
+                processed_count += 1
+            except Exception as exc:  # noqa: BLE001
+                failed_count += 1
+                error_msg = str(exc)
+                errors.append(f"Job {job.id} ({job.type}): {error_msg}")
+                mark_job_failed(db, job, error_msg)
+
+                if job.status == JobStatus.DEAD_LETTER.value:
+                    _mark_eval_run_failed_from_job_payload(
+                        db,
+                        job,
+                        f"Job moved to dead-letter after retries: {error_msg}",
+                    )
+                    _mark_import_run_failed_from_job_payload(
+                        db,
+                        job,
+                        f"Job moved to dead-letter after retries: {error_msg}",
+                    )
+
+        except Exception as exc:  # noqa: BLE001
+            error_msg = str(exc)
+            errors.append(f"Lease error: {error_msg}")
+            failed_count += 1
+
+    db.commit()
+    return {
+        "processed": processed_count,
+        "failed": failed_count,
+        "errors": errors,
+    }
 
 
 def run_worker() -> None:
