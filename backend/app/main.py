@@ -1,6 +1,6 @@
-from contextlib import asynccontextmanager
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,11 +19,7 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
-# Build allowed origins list
-allowed_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+allowed_origins = settings.cors_allowed_origins
 
 # Add Vercel domains in production
 if os.getenv("VERCEL_ENV") == "production" or os.getenv("VERCEL_URL"):

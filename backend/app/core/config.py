@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     credential_encryption_key: str | None = None
     magic_link_token_ttl_minutes: int = 15
     session_ttl_hours: int = 24
+    allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    session_cookie_secure: bool = False
+    session_cookie_samesite: str = "lax"
 
     elevenlabs_api_base: str = "https://api.elevenlabs.io"
     vapi_api_base: str = "https://api.vapi.ai"
@@ -34,6 +37,14 @@ class Settings(BaseSettings):
 
         digest = hashlib.sha256(self.secret_key.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest).decode("utf-8")
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() in {"prod", "production"}
 
     model_config = SettingsConfigDict(
         env_file=(str(Path(__file__).resolve().parents[3] / ".env"), str(Path(__file__).resolve().parents[2] / ".env")),

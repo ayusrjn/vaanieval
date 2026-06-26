@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import timezone
 
@@ -17,6 +18,8 @@ from app.services.security import (
     utc_now,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class VerifiedSession:
@@ -25,11 +28,21 @@ class VerifiedSession:
     workspace: Workspace
 
 
-def request_magic_link(db: Session, email: str) -> str:
+@dataclass
+class MagicLinkRequestResult:
+    token: str | None = None
+    sent: bool = False
+
+
+def request_magic_link(db: Session, email: str) -> MagicLinkRequestResult:
     settings = get_settings()
 
     user = db.scalar(select(User).where(User.email == email))
     if not user:
+        if settings.is_production:
+            logger.info("Magic-link requested for unknown email in production")
+            return MagicLinkRequestResult()
+
         user = User(email=email)
         db.add(user)
         db.flush()
@@ -50,8 +63,12 @@ def request_magic_link(db: Session, email: str) -> str:
     db.add(token_row)
     db.commit()
 
-    # In production, send token using email provider.
-    return token
+    if settings.is_production:
+        # TODO: integrate an email provider and send the magic link here.
+        logger.warning("Magic-link email delivery is not configured; token was not exposed")
+        return MagicLinkRequestResult(sent=False)
+
+    return MagicLinkRequestResult(token=token, sent=True)
 
 
 def verify_magic_link(db: Session, token: str) -> VerifiedSession | None:
