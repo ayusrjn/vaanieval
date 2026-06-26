@@ -84,6 +84,6 @@ python scripts/run_worker.py
 
 ## Notes
 
-- Magic link endpoint returns a raw dev token only outside production. Production does not auto-provision unknown emails or expose raw tokens; integrate a real email provider next.
+- Magic link endpoint returns a raw dev token only outside production. Production creates accounts and emails a sign-in link through the configured SMTP provider.
 - Provider API key is currently stored directly in DB for MVP. Add encryption before production.
 - Webhook ingestion is intentionally deferred.

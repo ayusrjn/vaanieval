@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     session_cookie_secure: bool = False
     session_cookie_samesite: str = "lax"
+    frontend_app_url: str = "http://localhost:5173"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_use_tls: bool = True
 
     elevenlabs_api_base: str = "https://api.elevenlabs.io"
     vapi_api_base: str = "https://api.vapi.ai"

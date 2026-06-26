@@ -1,15 +1,24 @@
-import { type FormEvent, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { type FormEvent, useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { requestMagicLink, verifyMagicLink } from '../api/endpoints'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [token, setToken] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
+
+  useEffect(() => {
+    const tokenFromUrl = searchParams.get('token')
+    if (tokenFromUrl) {
+      setToken(tokenFromUrl)
+      setMessage('Magic token loaded from your sign-in link.')
+    }
+  }, [searchParams])
 
   async function handleRequestLink(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -48,7 +57,7 @@ export function LoginPage() {
     <div className="page center">
       <div className="panel narrow">
         <h1>Sign in</h1>
-        <p>Request a magic link token with your email.</p>
+        <p>Request a magic sign-in link with your email.</p>
         <form onSubmit={handleRequestLink}>
           <label htmlFor="email">Email</label>
           <input

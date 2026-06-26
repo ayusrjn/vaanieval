@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.auth import AuthSession, MagicLinkToken
 from app.models.user import Membership, User, Workspace
+from app.services.email_service import EmailDeliveryError, send_magic_link_email
 from app.services.security import (
     create_random_token,
     expires_in_hours,
@@ -34,15 +35,9 @@ class MagicLinkRequestResult:
     sent: bool = False
 
 
-def request_magic_link(db: Session, email: str) -> MagicLinkRequestResult:
-    settings = get_settings()
-
+def _get_or_create_user_workspace(db: Session, email: str) -> User:
     user = db.scalar(select(User).where(User.email == email))
     if not user:
-        if settings.is_production:
-            logger.info("Magic-link requested for unknown email in production")
-            return MagicLinkRequestResult()
-
         user = User(email=email)
         db.add(user)
         db.flush()
@@ -54,6 +49,13 @@ def request_magic_link(db: Session, email: str) -> MagicLinkRequestResult:
         membership = Membership(user_id=user.id, workspace_id=workspace.id, role="owner")
         db.add(membership)
 
+    return user
+
+
+def request_magic_link(db: Session, email: str) -> MagicLinkRequestResult:
+    settings = get_settings()
+    user = _get_or_create_user_workspace(db, email)
+
     token = create_random_token()
     token_row = MagicLinkToken(
         user_id=user.id,
@@ -61,13 +63,18 @@ def request_magic_link(db: Session, email: str) -> MagicLinkRequestResult:
         expires_at=expires_in_minutes(settings.magic_link_token_ttl_minutes),
     )
     db.add(token_row)
-    db.commit()
 
     if settings.is_production:
-        # TODO: integrate an email provider and send the magic link here.
-        logger.warning("Magic-link email delivery is not configured; token was not exposed")
-        return MagicLinkRequestResult(sent=False)
+        try:
+            send_magic_link_email(settings, email, token)
+        except EmailDeliveryError:
+            db.rollback()
+            logger.exception("Production magic-link email delivery failed")
+            raise
+        db.commit()
+        return MagicLinkRequestResult(sent=True)
 
+    db.commit()
     return MagicLinkRequestResult(token=token, sent=True)
 
 

@@ -5,7 +5,7 @@ This document tracks what is implemented for slices 1-3 and what remains.
 ## Slice 1: Auth + Provider Connect + Agent Discovery
 
 Implemented:
-- Magic link request endpoint creates user/workspace on first login outside production.
+- Magic link request endpoint creates user/workspace on first login.
 - Magic link verify endpoint creates session cookie.
 - Logout and current-user endpoints.
 - Provider connection endpoint stores ElevenLabs account key.
@@ -14,7 +14,7 @@ Implemented:
 - Set-default-agent endpoint.
 
 Open items before production:
-- Replace production magic-link placeholder with real email delivery.
+- Configure production SMTP credentials for magic-link email delivery.
 - Encrypt provider API keys at rest.
 - Add CSRF protection and stronger cookie security flags by environment.
 

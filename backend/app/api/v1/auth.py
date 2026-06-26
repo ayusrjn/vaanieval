@@ -5,6 +5,7 @@ from app.api.deps import get_current_user, get_current_workspace_id
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.schemas.auth import AuthResponse, MagicLinkRequest, MagicLinkVerifyRequest, MessageResponse
+from app.services.email_service import EmailDeliveryError
 from app.services.auth_service import request_magic_link, revoke_session, verify_magic_link
 
 router = APIRouter()
@@ -12,10 +13,17 @@ router = APIRouter()
 
 @router.post("/magic-link", response_model=MessageResponse)
 def request_link(payload: MagicLinkRequest, db: Session = Depends(get_db)) -> MessageResponse:
-    result = request_magic_link(db, payload.email)
+    try:
+        result = request_magic_link(db, payload.email)
+    except EmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Magic-link email delivery is not configured.",
+        ) from exc
+
     if result.token:
         return MessageResponse(message=f"Dev token generated: {result.token}")
-    return MessageResponse(message="If an account exists for this email, a magic link will be sent.")
+    return MessageResponse(message="Magic link sent. Check your email for the sign-in link.")
 
 
 @router.post("/verify", response_model=AuthResponse)

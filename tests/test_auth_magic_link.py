@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from app.core.config import get_settings
 from app.db.base import Base
 from app.models import MagicLinkToken, User
+from app.services.email_service import EmailDeliveryError
 from app.services.auth_service import request_magic_link
 
 
@@ -37,8 +38,15 @@ def test_magic_link_dev_autoprovisions_and_returns_token(monkeypatch) -> None:
         get_settings.cache_clear()
 
 
-def test_magic_link_production_does_not_autoprovision_unknown_email(monkeypatch) -> None:
+def test_magic_link_production_autoprovisions_and_sends_email(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FRONTEND_APP_URL", "https://vaanieval.vercel.app")
+    sent: list[tuple[str, str]] = []
+
+    def fake_send(_settings, recipient: str, token: str) -> None:
+        sent.append((recipient, token))
+
+    monkeypatch.setattr("app.services.auth_service.send_magic_link_email", fake_send)
     get_settings.cache_clear()
     db = _session()
 
@@ -46,9 +54,13 @@ def test_magic_link_production_does_not_autoprovision_unknown_email(monkeypatch)
         result = request_magic_link(db, "unknown@example.com")
 
         assert result.token is None
-        assert result.sent is False
-        assert db.scalar(select(User).where(User.email == "unknown@example.com")) is None
-        assert db.scalar(select(MagicLinkToken)) is None
+        assert result.sent is True
+        user = db.scalar(select(User).where(User.email == "unknown@example.com"))
+        assert user is not None
+        assert db.scalar(select(MagicLinkToken).where(MagicLinkToken.user_id == user.id)) is not None
+        assert len(sent) == 1
+        assert sent[0][0] == "unknown@example.com"
+        assert sent[0][1]
     finally:
         db.close()
         get_settings.cache_clear()
@@ -56,6 +68,12 @@ def test_magic_link_production_does_not_autoprovision_unknown_email(monkeypatch)
 
 def test_magic_link_production_never_exposes_raw_token_for_existing_user(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
+    sent: list[tuple[str, str]] = []
+
+    def fake_send(_settings, recipient: str, token: str) -> None:
+        sent.append((recipient, token))
+
+    monkeypatch.setattr("app.services.auth_service.send_magic_link_email", fake_send)
     get_settings.cache_clear()
     db = _session()
 
@@ -67,8 +85,36 @@ def test_magic_link_production_never_exposes_raw_token_for_existing_user(monkeyp
         result = request_magic_link(db, "existing@example.com")
 
         assert result.token is None
-        assert result.sent is False
+        assert result.sent is True
         assert db.scalar(select(MagicLinkToken).where(MagicLinkToken.user_id == user.id)) is not None
+        assert len(sent) == 1
+        assert sent[0][0] == "existing@example.com"
+        assert sent[0][1]
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+def test_magic_link_production_rolls_back_when_email_delivery_fails(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+
+    def fake_send(_settings, _recipient: str, _token: str) -> None:
+        raise EmailDeliveryError("not configured")
+
+    monkeypatch.setattr("app.services.auth_service.send_magic_link_email", fake_send)
+    get_settings.cache_clear()
+    db = _session()
+
+    try:
+        try:
+            request_magic_link(db, "failed@example.com")
+        except EmailDeliveryError:
+            pass
+        else:
+            raise AssertionError("Expected EmailDeliveryError")
+
+        assert db.scalar(select(User).where(User.email == "failed@example.com")) is None
+        assert db.scalar(select(MagicLinkToken)) is None
     finally:
         db.close()
         get_settings.cache_clear()
