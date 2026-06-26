@@ -2,6 +2,8 @@
 
 Use these documents when implementing or debugging frontend features.
 
+Start with the shared [Frontend Design System](../../frontend-design-system.md) before adding or changing page-level styles.
+
 ## Features
 
 1. [App Shell, Routing, And Auth Guard](app-shell-routing-and-auth-guard.md)

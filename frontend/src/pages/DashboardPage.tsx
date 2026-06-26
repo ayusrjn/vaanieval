@@ -327,7 +327,7 @@ export function DashboardPage() {
               points={overview.trend}
               valueKey="success_rate"
               label="Success rate trend"
-              color="#2563eb"
+              color="#0f766e"
               formatter={(value) => `${value.toFixed(0)}%`}
             />
             <TrendChart
@@ -341,7 +341,7 @@ export function DashboardPage() {
               points={overview.trend}
               valueKey="average_overall_score"
               label="Overall score trend"
-              color="#7c3aed"
+              color="#f59e0b"
               formatter={(value) => `${value.toFixed(1)}`}
             />
           </section>
