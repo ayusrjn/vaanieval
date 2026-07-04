@@ -21,3 +21,4 @@
 
 - Public publishing, domain/DNS changes, analytics administration, customer quotes, and outreach require human approval.
 - Never include credentials, customer conversation content, personal information, or unapproved customer names in public material.
+- **Never commit generated images, visuals, or other binary assets to the Git repository for public hosting.** Instead, use a temporary file sharing service (like `tmpfiles.org`) to upload and generate a public link for API integrations (e.g., Buffer).
