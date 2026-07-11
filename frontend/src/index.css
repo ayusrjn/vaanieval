@@ -1043,6 +1043,19 @@ h3 {
   color: var(--workspace-text);
 }
 
+.stat-hint {
+  font-size: 0.78rem;
+  color: var(--workspace-text-secondary);
+}
+
+.stat-warn .stat-hint {
+  color: #b45309;
+}
+
+.stat-good .stat-hint {
+  color: #0f766e;
+}
+
 .stat-icon {
   width: 28px;
   height: 28px;
@@ -2185,6 +2198,16 @@ td {
   min-height: 36px;
   margin-top: 4px;
   font-size: 0.86rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.conversation-card:hover .conversation-rerun-button,
+.conversation-card:focus-within .conversation-rerun-button,
+.conversation-card.active .conversation-rerun-button {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .conversation-card:hover {
@@ -2467,6 +2490,25 @@ td {
   text-decoration: none;
   border-color: rgba(37, 99, 235, 0.35);
 }
+/* Demoted to a quiet text/icon link so "Run evaluation" reads as the single primary action. */
+.detail-back-link-subtle {
+  border: none;
+  background: transparent;
+  padding: 8px 6px;
+  gap: 8px;
+  color: var(--workspace-muted, #64748b);
+  font-weight: 500;
+}
+.detail-back-link-subtle:hover {
+  color: var(--workspace-text);
+  border-color: transparent;
+}
+.detail-refresh-button {
+  gap: 8px;
+}
+.detail-primary-action {
+  font-weight: 700;
+}
 .detail-summary-grid {
   display: grid;
   grid-template-columns: minmax(280px, 1.1fr) minmax(0, 1.9fr);
@@ -2577,6 +2619,30 @@ td {
   gap: 6px;
 }
 .detail-facts-grid strong {
+  color: var(--workspace-text);
+}
+
+.detail-conversation-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.detail-conversation-id-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.detail-copy-id-button {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--workspace-muted, #64748b);
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.detail-copy-id-button:hover {
   color: var(--workspace-text);
 }
 
@@ -3175,6 +3241,105 @@ td {
   margin: 0;
 }
 
+/* Agents dense table — scales from a handful of agents to hundreds without
+   turning into a heavy card wall (see UI/UX audit "Agents" section). */
+.agents-summary-band {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 0.86rem;
+  color: var(--workspace-text-secondary);
+}
+
+.agents-summary-band strong {
+  color: var(--workspace-text);
+}
+
+.agents-table {
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
+  overflow: hidden;
+}
+
+.agents-table-group + .agents-table-group {
+  border-top: 1px solid var(--workspace-border);
+}
+
+.agents-table-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) minmax(100px, 1fr) minmax(90px, 0.8fr) minmax(220px, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.agents-table-row-head {
+  background: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--workspace-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.agents-table-group .agents-table-row:not(.agents-table-row-head) {
+  background: #ffffff;
+}
+
+.agents-table-group:hover .agents-table-row:not(.agents-table-row-head) {
+  background: #f8fbff;
+}
+
+.agents-table-agent-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.agent-avatar-compact {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.agents-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.agents-table-menu-toggle {
+  padding: 8px 10px;
+}
+
+.agents-row-detail {
+  padding: 12px 14px 14px;
+  border-top: 1px dashed var(--workspace-border);
+  background: #fbfcff;
+  display: grid;
+  gap: 10px;
+}
+
+.agents-row-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .agents-table-row {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, auto);
+    font-size: 0.86rem;
+  }
+
+  .agents-table-actions span span {
+    display: none;
+  }
+}
+
+
 audio {
   width: 100%;
   display: none;
@@ -3579,4 +3744,84 @@ audio {
   .dashboard-panel-head {
     flex-direction: column;
   }
+}
+
+/* Loading skeleton — replaces plain "Loading..." text during route/data transitions. */
+.skeleton-page {
+  display: grid;
+  gap: 10px;
+}
+
+.skeleton-block {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.skeleton-line {
+  display: block;
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f8 25%, #f7f9fc 37%, #eef2f8 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+.skeleton-line-title {
+  height: 20px;
+  width: 40%;
+  margin-bottom: 4px;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+/* Import Conversations page: quick range chips, helper text, preview line, and a normal-width primary button. */
+.import-quick-range-row {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 14px;
+  flex-wrap: wrap;
+}
+
+.chip-button {
+  border: 1px solid var(--workspace-border);
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--workspace-text);
+  cursor: pointer;
+}
+
+.chip-button:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+.import-helper-text {
+  margin-top: -8px;
+  margin-bottom: 14px;
+  font-size: 0.82rem;
+}
+
+.import-preview-line {
+  background: #f8fafc;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
+  padding: 10px 14px;
+  font-size: 0.86rem;
+  margin-bottom: 16px;
+}
+
+.import-submit-button {
+  width: auto;
+  min-width: 240px;
+  display: inline-flex;
 }

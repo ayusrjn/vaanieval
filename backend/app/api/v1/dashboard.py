@@ -29,7 +29,7 @@ _METRIC_LABELS: dict[str, str] = {
     'task_completion_score': 'Task completion',
     'intent_understanding_score': 'Intent understanding',
     'required_info_capture_score': 'Required info capture',
-    'ai_detectability_score': 'AI detectability',
+    'ai_detectability_score': 'Human-like delivery',
 }
 _METRIC_ORDER = list(_METRIC_LABELS.keys())
 _QA_PASS_OVERALL = 80
@@ -219,7 +219,15 @@ def _summarize_records(records: list[dict[str, object]]) -> dict[str, object]:
 
     metric_summaries: list[DashboardMetricSummary] = []
     for metric_key in _METRIC_ORDER:
-        metric_values = [float(row[metric_key]) for row in records if row.get(metric_key) is not None]
+        # Human-like delivery (ai_detectability_score) is a risk score where lower is
+        # better. Convert it to the same "higher is better" quality scale as every
+        # other metric so averages, trend colors, and the weakest-metric ranking stay
+        # consistent instead of misreporting a good score as the worst metric.
+        metric_values = [
+            _metric_quality_score(metric_key, float(row[metric_key]))
+            for row in records
+            if row.get(metric_key) is not None
+        ]
         confidence_values = [
             float(row['confidence_by_metric'][metric_key])
             for row in records

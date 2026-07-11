@@ -17,6 +17,7 @@ import { getDashboardOverview } from '../api/endpoints'
 import type { DashboardMetricSummary, DashboardOverviewResponse, DashboardTrendPoint } from '../api/types'
 import { PageHeader } from '../components/PageHeader'
 import { StatCard } from '../components/StatCard'
+import { formatDateOnly, humanizeOutcome } from '../lib/format'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, ChartTooltip, Legend)
 
@@ -66,10 +67,6 @@ function scoreTone(value: number | null | undefined) {
   if (value >= 80) return 'good'
   if (value >= 60) return 'warning'
   return 'risk'
-}
-
-function humanizeOutcome(value: string) {
-  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function MetricScoreBar({ metric }: { metric: DashboardMetricSummary }) {
@@ -278,10 +275,33 @@ export function DashboardPage() {
         ) : (
           <>
             <section className="stats-grid dashboard-stats-grid">
-              <StatCard icon="check-circle" label="QA pass rate" value={formatPercent(summary.success_rate)} tone={summary.success_rate != null && summary.success_rate < 0.8 ? 'warn' : 'good'} />
-              <StatCard icon="comments" label="Calls evaluated" value={`${summary.evaluated_conversations}/${summary.conversations}`} />
-              <StatCard icon="table-cells-large" label="Average quality score" value={formatScoreOutOf100(summary.average_overall_score)} />
-              <StatCard icon="exclamation-triangle" label="Needs attention" value={`${summary.needs_attention_conversations}`} tone={summary.needs_attention_conversations > 0 ? 'warn' : 'good'} />
+              <StatCard
+                icon="check-circle"
+                label="QA pass rate"
+                value={formatPercent(summary.success_rate)}
+                tone={summary.success_rate != null && summary.success_rate < 0.8 ? 'warn' : 'good'}
+                hint={summary.success_rate != null && summary.success_rate < 0.8 ? 'Below 80% target' : 'Meets 80% target'}
+              />
+              <StatCard
+                icon="comments"
+                label="Calls evaluated"
+                value={`${summary.evaluated_conversations}/${summary.conversations}`}
+                hint={summary.evaluated_conversations === summary.conversations ? 'All calls evaluated' : `${summary.conversations - summary.evaluated_conversations} awaiting evaluation`}
+              />
+              <StatCard
+                icon="table-cells-large"
+                label="Average quality score"
+                value={formatScoreOutOf100(summary.average_overall_score)}
+                tone={summary.average_overall_score != null && summary.average_overall_score < 80 ? 'warn' : 'good'}
+                hint="Target 80+"
+              />
+              <StatCard
+                icon="exclamation-triangle"
+                label="Needs attention"
+                value={`${summary.needs_attention_conversations}`}
+                tone={summary.needs_attention_conversations > 0 ? 'warn' : 'good'}
+                hint={summary.needs_attention_conversations > 0 ? 'Review these calls first' : 'Nothing flagged'}
+              />
             </section>
 
             <section className="panel dashboard-insight-band">
@@ -289,8 +309,8 @@ export function DashboardPage() {
                 <small>Current priority</small>
                 <h2>{buildInsight(overview)}</h2>
                 <p className="muted">
-                  {overview.start_date} to {overview.end_date}
-                  {hasPreviousBaseline ? `, compared with ${overview.previous_start_date} to ${overview.previous_end_date}.` : '. No previous baseline is available for this range.'}
+                  {formatDateOnly(overview.start_date)} to {formatDateOnly(overview.end_date)}
+                  {hasPreviousBaseline ? `, compared with ${formatDateOnly(overview.previous_start_date)} to ${formatDateOnly(overview.previous_end_date)}.` : '. No previous baseline is available for this range.'}
                 </p>
               </div>
               <Link to="/conversations" className="dashboard-primary-action">
@@ -364,9 +384,13 @@ export function DashboardPage() {
                     <div key={`${agent.agent_id ?? agent.agent_name}`} className="dashboard-agent-row">
                       <span>
                         <strong>{agent.agent_name}</strong>
-                        <small className="muted">{agent.evaluated_conversations} evaluated</small>
                       </span>
-                      <span>{agent.conversations}</span>
+                      <span>
+                        {agent.conversations}
+                        {agent.evaluated_conversations !== agent.conversations ? (
+                          <small className="muted"> ({agent.evaluated_conversations} evaluated)</small>
+                        ) : null}
+                      </span>
                       <span className={`dashboard-status-chip dashboard-status-${agent.success_rate != null && agent.success_rate >= 0.8 ? 'good' : 'warning'}`}>
                         {formatPercent(agent.success_rate)}
                       </span>
