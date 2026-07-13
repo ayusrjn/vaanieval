@@ -1,13 +1,3 @@
-## Product Screenshots
-
-<p align="center">
-  <img src="https://tmpfiles.org/dl/1783964499.165f4e05faec08f3/w5wp1vMXWMXv/vaanieval-dashboard.png" alt="VaaniEval dashboard" width="100%">
-</p>
-
-<p align="center">
-  <img src="https://tmpfiles.org/dl/1783964512.d6618e1ffc8580c5/wjwP1zMxWjYK/vaanieval-conversations.png" alt="VaaniEval conversation list and review" width="100%">
-</p>
-
 <p align="center">
   <img src="docs/assets/screenshots/twitter_banner.png" alt="VaaniEval banner" width="100%">
 </p>
@@ -42,6 +32,16 @@
 VaaniEval helps voice-agent teams inspect real conversations, run evaluator-backed quality checks, and turn production call data into actionable QA, product, and engineering feedback.
 
 > VaaniEval is currently a full-stack application, not a published Python package. The source of truth is the `backend/` FastAPI service, `frontend/` React app, and backend worker process.
+
+## Product Screenshots
+
+<p align="center">
+  <img src="https://tmpfiles.org/dl/1783964499.165f4e05faec08f3/w5wp1vMXWMXv/vaanieval-dashboard.png" alt="VaaniEval dashboard" width="100%">
+</p>
+
+<p align="center">
+  <img src="https://tmpfiles.org/dl/1783964512.d6618e1ffc8580c5/wjwP1zMxWjYK/vaanieval-conversations.png" alt="VaaniEval conversation list and review" width="100%">
+</p>
 
 ![Dashboard Analytics](docs/assets/screenshots/dashboard-analytics.png)
 
