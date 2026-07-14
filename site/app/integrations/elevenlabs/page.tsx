@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Cta } from '@/components/Cta'
+import { IntegrationStatus } from '@/components/IntegrationStatus'
 import { PageHero } from '@/components/PageHero'
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function Page() {
       <h2>Look beyond provider activity</h2>
       <p>Call duration and conversation volume are useful operational context. VaaniEval adds reviewable quality signals such as task completion, intent understanding, and required-information capture, so teams can inspect whether a call achieved the right outcome.</p>
       <div className="callout"><strong>Run the workflow in your environment.</strong><p>VaaniEval is open source and self-hostable. Your team controls the deployment, provider permissions, evaluator configuration, retention, and access policies.</p><Link className="text-link" href="/open-source">Explore self-hosting and source code <span aria-hidden="true">→</span></Link></div>
+      <IntegrationStatus currentProvider="ElevenLabs" />
     </section>
     <Cta />
   </>

@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Cta } from '@/components/Cta'
 import { GitHubCta } from '@/components/GitHubCta'
+import { TrackedLink } from '@/components/TrackedLink'
+import { siteConfig } from '@/lib/site'
 
 export const metadata: Metadata = {
   title: 'Self-hosted voice AI evaluation',
@@ -32,7 +34,8 @@ export default function Home() {
         <h1>Know how your voice agents perform—on infrastructure you control.</h1>
         <p className="lede">Import real production calls, evaluate the outcomes platform dashboards miss, and keep every score connected to the conversation evidence behind it.</p>
         <div className="actions">
-          <GitHubCta className="button button-github" event="github_star_hero_click" />
+          <TrackedLink className="button" href={siteConfig.appUrl} event="hosted_app_hero_click">Try the app</TrackedLink>
+          <GitHubCta className="button button-secondary" event="github_star_hero_click" />
           <Link className="button button-secondary" href="/design-partners">Apply as a design partner</Link>
         </div>
         <p className="microcopy">MIT licensed · Self-hostable · ElevenLabs and Vapi imports</p>
@@ -60,6 +63,28 @@ export default function Home() {
       <div className="section-intro"><p className="eyebrow">A practical production scorecard</p><h2>Measure the behaviors that decide whether a call was actually good.</h2><p className="lede-small">VaaniEval starts with a focused evaluator-backed scorecard. Each result is paired with a rationale and conversation evidence, so it is a starting point for review—not an unexplained number.</p><Link className="text-link" href="/resources/evaluation-metrics">Explore evaluation metrics <span aria-hidden="true">→</span></Link></div>
       <div className="score-grid">{scorecard.map(([title, question, score]) => <article key={title}><div><span className="score-ring">{score}</span><span className="score-out-of">/100</span></div><h3>{title}</h3><p>{question}</p></article>)}</div>
       <aside className="roadmap-card"><span>Design-partner roadmap</span><p><strong>Bring your own criteria</strong> or let an evaluator suggest a first rubric for your workflow.</p><Link href="/design-partners">Help shape it <span aria-hidden="true">→</span></Link></aside>
+    </section>
+
+    <section className="section shell run-options">
+      <div className="section-intro"><p className="eyebrow">Choose your path</p><h2>Choose how to run VaaniEval.</h2><p className="lede-small">Start in the hosted workspace or deploy the MIT-licensed project in infrastructure your team manages.</p></div>
+      <div className="run-options-grid">
+        <article>
+          <p className="card-kicker">Hosted app</p>
+          <h3>Try the managed workspace.</h3>
+          <p>Begin in the VaaniEval app at app.vaanieval.com and follow the sign-in flow to get started.</p>
+          <TrackedLink className="button" href={siteConfig.appUrl} event="hosted_app_run_choice_click">Try the app</TrackedLink>
+        </article>
+        <article>
+          <p className="card-kicker">Self-hosted</p>
+          <h3>Deploy it in your own infrastructure.</h3>
+          <p>Inspect and deploy the MIT-licensed project when your team needs to manage the environment directly.</p>
+          <div className="inline-links">
+            <Link className="text-link" href="/open-source">Explore the open-source project <span aria-hidden="true">→</span></Link>
+            <GitHubCta className="text-link" event="github_star_run_choice_click">View the repository <span aria-hidden="true">→</span></GitHubCta>
+            <a className="text-link" href="https://github.com/shubhamofbce/vaanieval/blob/main/DEPLOYMENT.md" target="_blank" rel="noreferrer">Read deployment guidance <span aria-hidden="true">→</span></a>
+          </div>
+        </article>
+      </div>
     </section>
 
     <section className="section split deployment-section shell">

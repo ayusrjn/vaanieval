@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Cta } from '@/components/Cta'
+import { IntegrationStatus } from '@/components/IntegrationStatus'
 import { PageHero } from '@/components/PageHero'
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function Page() {
       <h2>Make operational data actionable</h2>
       <p>Use evaluation to identify whether an agent understood the caller, captured the information it needed, and completed the intended task—not only whether a call occurred or ended.</p>
       <div className="callout"><strong>Provider fields can vary.</strong><p>Validate the transcript, metadata, and media available through your Vapi configuration before defining a production review process. Keep the evidence attached to every decision.</p><Link className="text-link" href="/resources/evaluation-metrics">See the evaluation metrics guide <span aria-hidden="true">→</span></Link></div>
+      <IntegrationStatus currentProvider="Vapi" />
     </section>
     <Cta />
   </>
