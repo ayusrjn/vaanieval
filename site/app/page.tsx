@@ -34,11 +34,11 @@ export default function Home() {
         <h1>Know how your voice agents perform—on infrastructure you control.</h1>
         <p className="lede">Import real production calls, evaluate the outcomes platform dashboards miss, and keep every score connected to the conversation evidence behind it.</p>
         <div className="hero-actions">
-          <TrackedLink className="button" href={siteConfig.appUrl} event="hosted_app_hero_click">Try the app</TrackedLink>
-          <div className="hero-secondary-actions">
-            <GitHubCta className="text-link hero-secondary-link" event="github_star_hero_click">Star <span aria-hidden="true">→</span></GitHubCta>
-            <Link className="text-link hero-secondary-link" href="/design-partners">Design partner <span aria-hidden="true">→</span></Link>
+          <div className="hero-primary-actions">
+            <TrackedLink className="button" href={siteConfig.appUrl} event="hosted_app_hero_click">Try the app</TrackedLink>
+            <Link className="button button-secondary" href="/design-partners">Design partner</Link>
           </div>
+          <GitHubCta className="text-link hero-star-link" event="github_star_hero_click">Star <span aria-hidden="true">→</span></GitHubCta>
         </div>
         <p className="microcopy">MIT licensed · Self-hostable · ElevenLabs and Vapi imports</p>
       </div>
