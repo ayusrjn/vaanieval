@@ -261,6 +261,10 @@ Before opening a PR, run the relevant backend and frontend checks and include sc
 
 ## Community
 
+Need help setting up or deploying VaaniEval? Email
+[shubham@vaanieval.com](mailto:shubham@vaanieval.com). I am happy to help you
+get it running.
+
 Join [GitHub Discussions](https://github.com/shubhamofbce/vaanieval/discussions)
 to ask setup and usage questions, compare voice-agent evaluation approaches,
 propose ideas, or share what you have built. Use
