@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { posts, siteConfig } from '@/lib/site';
 
@@ -261,6 +262,9 @@ export default async function Page({
         parsedBlocks.push({ type: 'h2', text: line.slice(3) });
       } else if (line.startsWith('### ')) {
         parsedBlocks.push({ type: 'h3', text: line.slice(4) });
+      } else if (/^\[[^\]]+\]\(\/[^)]+\)$/.test(line)) {
+        const match = line.match(/^\[([^\]]+)\]\((\/[^)]+)\)$/);
+        if (match) parsedBlocks.push({ type: 'link', label: match[1], href: match[2] });
       } else if (line.startsWith('![') && line.includes('](') && line.endsWith(')')) {
         const altStart = 2;
         const altEnd = line.indexOf('](');
@@ -342,6 +346,9 @@ export default async function Page({
           }
           if (block.type === 'diagram') {
             return <VPCDiagram key={idx} />;
+          }
+          if (block.type === 'link') {
+            return <p key={idx}><Link className="text-link" href={block.href}>{block.label} <span aria-hidden="true">→</span></Link></p>;
           }
 
           return (
